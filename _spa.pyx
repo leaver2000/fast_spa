@@ -1,12 +1,20 @@
-# pyright: reportMissingImports=false, reportGeneralTypeIssues=false
+# pyright: reportGeneralTypeIssues=false
+"""https://www.nrel.gov/docs/fy08osti/34302.pdf"""
 import numpy as np
 cimport numpy as cnp
 from  numpy  cimport ndarray as NDArray
+from numpy cimport float32_t as f32, float64_t as f64, ndarray as NDArray
 cnp.import_array()
 
 ctypedef cnp.float64_t F64
-DTYPE = np.float64
+# ctypedef class _spa.Array[object NDArray[F64, ndim=3]]:
+#     pass
+ctypedef fused FloatTypes:
+    double
+    float
 
+DTYPE = np.float64
+# Table A4.2. Earth Periodic Terms 
 L0 = np.array(
     [
         [175347046.0, 0.0, 0.0],
@@ -389,6 +397,7 @@ NUTATION_YTERM_ARRAY = np.array(
 )
 
 
+
 cdef _sum_mult_cos_add_mult(NDArray[F64, ndim=2] x, NDArray[F64, ndim=3] jme):
     cdef int i, size_x, n_time
     cdef NDArray[F64, ndim=3] out
@@ -408,7 +417,6 @@ cdef _heliocentric_longitude(cnp.ndarray[F64, ndim=3] jme):
     l3 = _sum_mult_cos_add_mult(L3, jme)
     l4 = _sum_mult_cos_add_mult(L4, jme)
     l5 = _sum_mult_cos_add_mult(L5, jme)
-
     l_rad = (l0 + l1 * jme + l2 * jme**2 + l3 * jme**3 + l4 * jme**4 + l5 * jme**5) / 10**8
     l = np.rad2deg(l_rad)
     return l % 360
@@ -437,7 +445,8 @@ cdef _heliocentric_radius_vector(NDArray[F64, ndim=3] jme):
 cdef _geocentric_longitude(cnp.ndarray[F64, ndim=3] heliocentric_longitude):
     cdef NDArray[F64, ndim=3] theta
     theta = heliocentric_longitude + 180.0
-    return theta % 360
+    theta %= 360
+    return theta
 
 
 cdef _geocentric_latitude(NDArray[F64, ndim=3] heliocentric_latitude):
@@ -445,45 +454,97 @@ cdef _geocentric_latitude(NDArray[F64, ndim=3] heliocentric_latitude):
     beta = -1.0 * heliocentric_latitude
     return beta
 
+# 3.4. Calculate the nutation in longitude and obliquity ()R and )g): 
+# 3.4.1. Calculate the mean elongation of the moon from the sun, X0 (in degrees), 
+# X0 = 297,85036 . + 445267111480 . * JCE − (15) JCE 3 
+# 0 0019142 . * JCE 2 + . 189474 
+# 3.4.2. Calculate the mean anomaly of the sun (Earth), X1 (in degrees), 
+# X1 = 357 52772 . + 35999 050340 . * JCE − 3 (16) 
+# 2 JCE
+# 0 0001603 . * JCE − . 300000 
 
+# 3.4.3. Calculate the mean anomaly of the moon, X2 (in degrees), 
+# X 2 = 134 96298 . + 477198 867398 . * JCE +
+
+# 2 JCE 3 
+# 0 0086972 . * JCE + . 56250 
+# 3.4.4. Calculate the moon’s argument of latitude, X3 (in degrees), 
+# X 3 = 9327191 . + 483202 017538 . * JCE −
+# JCE 3 (18) 0 0036825 . * JCE 2 + . 327270 
+# 3.4.5. Calculate the longitude of the ascending node of the moon’s mean orbit on the 
+# ecliptic, measured from the mean equinox of the date, X4 (in degrees), 
+# X 4 = 125 04452 . − 1934 136261 . * JCE +
+# JCE 3 (19) 0 0020708 . * JCE 2 + . 450000 
+# 3.4.6. For each row in Table A4.3, calculate the terms )Ri
+#  and )gi
+#  (in 0.0001of arc 
+# seconds), 
+# 4 
+# ∆ψ i = (ai + bi * JCE ) *sin ( ∑ X j 
+# *Yi, j ) , (20) 
+# j = 0 
+# 6 
+ 
+# 4 
+# ∆ ε i = (c + d * JCE ) *cos ( ∑ X *Y ) , (21) i i j i, j 
+# j = 0 
+# where, 
+# - ai
+#  , bi
+#  , ci , and di are the values listed in the ith row and columns a, b, c, and d in 
+# Table A4.3. 
+# - X j
+#  is the jth X calculated by using Equations 15 through 19. 
+# - Yi, j is the value listed in ith row and jth Y column in Table A4.3. 
 cdef _mean_elongation(NDArray[F64, ndim=3] jce):
-    x0 = 297.85036 + 445267.111480 * jce - 0.0019142 * jce**2 + jce**3 / 189474
-    return x0
+    cdef NDArray[F64, ndim=3] x1
+    x1 = 297.85036 + 445267.111480 * jce - 0.0019142 * jce**2 + jce**3 / 189474
+    return x1
 
 
 cdef _mean_anomaly_sun(NDArray[F64, ndim=3] jce):
+    """3.4.3. Calculate the mean anomaly of the moon, X2 (in degrees), """
+    cdef NDArray[F64, ndim=3] x1
     x1 = 357.52772 + 35999.050340 * jce - 0.0001603 * jce**2 - jce**3 / 300000
     return x1
 
 
 cdef _mean_anomaly_moon(NDArray[F64, ndim=3] jce):
-    x2 = (
-        134.96298
-        + 477198.867398 * jce
-        + 0.0086972 * jce**2
-        + jce**3 / 56250
-    )
+    cdef NDArray[F64, ndim=3] x2
+    x2 = 134.96298 + 477198.867398 * jce + 0.0086972 * jce**2 + jce**3 / 56250
     return x2
 
 
 cdef _moon_argument_latitude(NDArray[F64, ndim=3] jce):
-    x3 = (
-        93.27191
-        + 483202.017538 * jce
-        - 0.0036825 * jce**2
-        + jce**3 / 327270
-    )
+    cdef NDArray[F64, ndim=3] x3
+    x3 = 93.27191 + 483202.017538 * jce - 0.0036825 * jce**2 + jce**3 / 327270
     return x3
 
 
 cdef _moon_ascending_longitude(NDArray[F64, ndim=3] jce):
-    x4 = (
-        125.04452
-        - 1934.136261 * jce
-        + 0.0020708 * jce**2
-        + jce**3 / 450000
-    )
+    cdef NDArray[F64, ndim=3] x4
+    x4 = 125.04452 - 1934.136261 * jce + 0.0020708 * jce**2 + jce**3 / 450000
     return x4
+# Calculate the nutation in longitude and obliquity ()R and )g):
+cdef _calculate_the_nutation_in_longitude_and_obliquity(NDArray[F64, ndim=3] jce):
+    """3.4. Calculate the nutation in longitude and obliquity ()R and )g)"""
+    cdef NDArray[F64, ndim=3] x0, x1, x2, x3, x4
+    # 3.4.1. Calculate the mean elongation of the moon from the sun, X0 (in degrees)
+    x0 = 297.85036 + 445_267.111480 * jce - 0.0019142 * jce**2 + jce**3 / 189_474
+    # 3.4.2. Calculate the mean anomaly of the sun (Earth), X1 (in degrees)
+    x1 = 357.52772 + 35999.050340 * jce - 0.0001603 * jce**2 - jce**3 / 3e5
+    # 3.4.3. Calculate the mean anomaly of the moon, X2 (in degrees)
+    x2 = 134.96298 + 477_198.867398 * jce + 0.0086972 * jce**2 + jce**3 / 56_250
+    # 3.4.4. Calculate the moon’s argument of latitude, X3 (in degrees)
+    x3 = 93.27191 + 483_202.017538 * jce - 0.0036825 * jce**2 + jce**3 / 327_270
+    # 3.4.5. Calculate the longitude of the ascending node of the moon’s mean orbit on the
+    # ecliptic, measured from the mean equinox of the date, X4 (in degrees)
+    x4 = 125.04452 - 1_934.136261 * jce + 0.0020708 * jce**2 + jce**3 / 45e4
+
+
+    return _longitude_obliquity_nutation(jce, x0, x1, x2, x3, x4)
+
+
 
 
 cdef _longitude_obliquity_nutation(
@@ -767,39 +828,39 @@ cdef _julian_ephemeris_millennium(NDArray[F64, ndim=3] jce):
 # =============================================================================
 
 
-def longitude_obliquity_nutation(
-    julian_ephemeris_century, 
-    x0, 
-    x1, 
-    x2, 
-    x3, 
-    x4, 
-    # out
-):
-    delta_psi_sum = 0.0
-    delta_eps_sum = 0.0
-    for row in range(NUTATION_YTERM_ARRAY.shape[0]):
-        a = NUTATION_ABCD_ARRAY[row, 0]
-        b = NUTATION_ABCD_ARRAY[row, 1]
-        c = NUTATION_ABCD_ARRAY[row, 2]
-        d = NUTATION_ABCD_ARRAY[row, 3]
-        arg = np.radians(
-            NUTATION_YTERM_ARRAY[row, 0] * x0
-            + NUTATION_YTERM_ARRAY[row, 1] * x1
-            + NUTATION_YTERM_ARRAY[row, 2] * x2
-            + NUTATION_YTERM_ARRAY[row, 3] * x3
-            + NUTATION_YTERM_ARRAY[row, 4] * x4
-        )
-        delta_psi_sum += (a + b * julian_ephemeris_century) * np.sin(arg)
-        delta_eps_sum += (c + d * julian_ephemeris_century) * np.cos(arg)
-    delta_psi = delta_psi_sum * 1.0 / 36000000
-    delta_eps = delta_eps_sum * 1.0 / 36000000
-    # seems like we ought to be able to return a tuple here instead
-    # of resorting to `out`, but returning a UniTuple from this
-    # function caused calculations elsewhere to give the wrong result.
-    # very difficult to investigate since it did not occur when using
-    # object mode.  issue was observed on numba 0.56.4
-    return delta_psi, delta_eps
+# def longitude_obliquity_nutation(
+#     julian_ephemeris_century, 
+#     x0, 
+#     x1, 
+#     x2, 
+#     x3, 
+#     x4, 
+#     # out
+# ):
+#     delta_psi_sum = 0.0
+#     delta_eps_sum = 0.0
+#     for row in range(NUTATION_YTERM_ARRAY.shape[0]):
+#         a = NUTATION_ABCD_ARRAY[row, 0]
+#         b = NUTATION_ABCD_ARRAY[row, 1]
+#         c = NUTATION_ABCD_ARRAY[row, 2]
+#         d = NUTATION_ABCD_ARRAY[row, 3]
+#         arg = np.radians(
+#             NUTATION_YTERM_ARRAY[row, 0] * x0
+#             + NUTATION_YTERM_ARRAY[row, 1] * x1
+#             + NUTATION_YTERM_ARRAY[row, 2] * x2
+#             + NUTATION_YTERM_ARRAY[row, 3] * x3
+#             + NUTATION_YTERM_ARRAY[row, 4] * x4
+#         )
+#         delta_psi_sum += (a + b * julian_ephemeris_century) * np.sin(arg)
+#         delta_eps_sum += (c + d * julian_ephemeris_century) * np.cos(arg)
+#     delta_psi = delta_psi_sum * 1.0 / 36000000
+#     delta_eps = delta_eps_sum * 1.0 / 36000000
+#     # seems like we ought to be able to return a tuple here instead
+#     # of resorting to `out`, but returning a UniTuple from this
+#     # function caused calculations elsewhere to give the wrong result.
+#     # very difficult to investigate since it did not occur when using
+#     # object mode.  issue was observed on numba 0.56.4
+#     return delta_psi, delta_eps
 
 
 cdef _mean_ecliptic_obliquity(
