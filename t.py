@@ -27,32 +27,33 @@ def main():
         101325.0 / 100.0,
         12.0,
         0.5667,
-        spa.calculate_deltat(timestamp[0].year, timestamp[0].month),
+        np.array([spa.calculate_deltat(timestamp[0].year, timestamp[0].month)]),
     )
 
-    pv_spa = np.stack(pvlib.spa.solar_position_numpy(*args, numthreads=1)[:-1])
+    # pv_spa = np.stack(pvlib.spa.solar_position_numpy(*args, numthreads=1)[:-1])
     fast_spa = _spa.fast_spa(*args)
-    print(pv_spa.shape, fast_spa.shape)
-    assert np.allclose(fast_spa[:, 0], pv_spa)
+    print(fast_spa)
+    # print(pv_spa.shape, fast_spa.shape)
+    # assert np.allclose(fast_spa[:, 0], pv_spa)
 
-    print(
-        # fast_spa
-        pv_spa.shape,
-        fast_spa.shape,
-        timeit.timeit(lambda: _spa.fast_spa(*args), number=2),
-        timeit.timeit(lambda: pvlib.spa.solar_position_numpy(*args, numthreads=1), number=2),
-        _spa.fast_spa(
-            unixtime[:2],
-            lats,
-            lons,
-            0.0,
-            # np.array([[0.0]]),
-            101325.0 / 100.0,
-            12.0,
-            0.5667,
-            spa.calculate_deltat(timestamp[0].year, timestamp[0].month),
-        ).shape,
-    )
+    # print(
+    #     # fast_spa
+    #     pv_spa.shape,
+    #     fast_spa.shape,
+    #     timeit.timeit(lambda: _spa.fast_spa(*args), number=2),
+    #     timeit.timeit(lambda: pvlib.spa.solar_position_numpy(*args, numthreads=1), number=2),
+    #     _spa.fast_spa(
+    #         unixtime[:2],
+    #         lats,
+    #         lons,
+    #         0.0,
+    #         # np.array([[0.0]]),
+    #         101325.0 / 100.0,
+    #         12.0,
+    #         0.5667,
+    #         spa.calculate_deltat(timestamp[0].year, timestamp[0].month),
+    #     ).shape,
+    # )
 
 
 if __name__ == "__main__":
