@@ -1,20 +1,12 @@
 # pyright: reportMissingImports=false, reportGeneralTypeIssues=false
 import numpy as np
-
 cimport numpy as cnp
-cimport cython
 from  numpy  cimport ndarray as NDArray
 cnp.import_array()
 
 ctypedef cnp.float64_t F64
-
-
 DTYPE = np.float64
-# LON_COF = np.array([280.4664567, 36000.76982779, 0.0003032028, 1.0 / 49931000, -1.0 / 153000000], dtype=np.float64)
-# declare L0 type
-# cdef np.ndarray[double, ndim=2] A0
 
-# heliocentric longitude coefficients
 L0 = np.array(
     [
         [175347046.0, 0.0, 0.0],
@@ -397,31 +389,6 @@ NUTATION_YTERM_ARRAY = np.array(
 )
 
 
-# def julian_day(unixtime):
-#     jd = unixtime * 1.0 / 86400 + 2440587.5
-#     return jd
-
-
-# def julian_ephemeris_day(julian_day, delta_t):
-#     jde = julian_day + delta_t * 1.0 / 86400
-#     return jde
-
-
-# def julian_century(jd):
-#     jc = (jd - 2451545) * 1.0 / 36525
-#     return jc
-
-
-# def julian_ephemeris_century(julian_ephemeris_day):
-#     jce = (julian_ephemeris_day - 2451545) * 1.0 / 36525
-#     return jce
-
-
-# def julian_ephemeris_millennium(jce):
-#     jme = jce * 1.0 / 10
-#     return jme
-
-
 cdef _sum_mult_cos_add_mult(NDArray[F64, ndim=2] x, NDArray[F64, ndim=3] jme):
     cdef int i, size_x, n_time
     cdef NDArray[F64, ndim=3] out
@@ -431,6 +398,7 @@ cdef _sum_mult_cos_add_mult(NDArray[F64, ndim=2] x, NDArray[F64, ndim=3] jme):
     for i in range(size_x):
         out += x[i, 0] * np.cos(x[i, 1] + x[i, 2] * jme)
     return out
+
 
 cdef _heliocentric_longitude(cnp.ndarray[F64, ndim=3] jme):
     cdef NDArray[F64, ndim=3] l0, l1, l2, l3, l4, l5, l_rad, l
@@ -444,7 +412,6 @@ cdef _heliocentric_longitude(cnp.ndarray[F64, ndim=3] jme):
     l_rad = (l0 + l1 * jme + l2 * jme**2 + l3 * jme**3 + l4 * jme**4 + l5 * jme**5) / 10**8
     l = np.rad2deg(l_rad)
     return l % 360
-
 
 
 cdef _heliocentric_latitude(NDArray[F64, ndim=3] jme):
@@ -480,22 +447,12 @@ cdef _geocentric_latitude(NDArray[F64, ndim=3] heliocentric_latitude):
 
 
 cdef _mean_elongation(NDArray[F64, ndim=3] jce):
-    x0 = (
-        297.85036
-        + 445267.111480 * jce
-        - 0.0019142 * jce**2
-        + jce**3 / 189474
-    )
+    x0 = 297.85036 + 445267.111480 * jce - 0.0019142 * jce**2 + jce**3 / 189474
     return x0
 
 
 cdef _mean_anomaly_sun(NDArray[F64, ndim=3] jce):
-    x1 = (
-        357.52772
-        + 35999.050340 * jce
-        - 0.0001603 * jce**2
-        - jce**3 / 300000
-    )
+    x1 = 357.52772 + 35999.050340 * jce - 0.0001603 * jce**2 - jce**3 / 300000
     return x1
 
 
@@ -528,7 +485,7 @@ cdef _moon_ascending_longitude(NDArray[F64, ndim=3] jce):
     )
     return x4
 
-# 
+
 cdef _longitude_obliquity_nutation(
     NDArray[F64, ndim=3] jce, 
     NDArray[F64, ndim=3] x0, 
@@ -557,50 +514,6 @@ cdef _longitude_obliquity_nutation(
     # very difficult to investigate since it did not occur when using
     # object mode.  issue was observed on numba 0.56.4
     return delta_psi, delta_eps
-    # out[0] = delta_psi
-    # out[1] = delta_eps
-# cdef longitude_obliquity_nutation(
-#     NDArray[F64, ndim=1] jce, 
-#     NDArray[F64, ndim=1] x0, 
-#     NDArray[F64, ndim=1] x1, 
-#     NDArray[F64, ndim=1] x2, 
-#     NDArray[F64, ndim=1] x3, 
-#     NDArray[F64, ndim=1] x4, 
-# ):
-    
-#     cdef int row, n
-#     cdef float a, b, c, d
-#     cdef NDArray[F64, ndim=1] arg, delta_psi, delta_eps
-#     n = NUTATION_YTERM_ARRAY.shape[0]
-#     delta_psi = np.zeros_like(jce)
-#     delta_eps = np.zeros_like(jce)
-#     # delta_psi_sum = 0.0
-#     # delta_eps_sum = 0.0
-
-#     for row in range(n):
-#         arg = np.radians(
-#             NUTATION_YTERM_ARRAY[row, 0] * x0
-#             + NUTATION_YTERM_ARRAY[row, 1] * x1
-#             + NUTATION_YTERM_ARRAY[row, 2] * x2
-#             + NUTATION_YTERM_ARRAY[row, 3] * x3
-#             + NUTATION_YTERM_ARRAY[row, 4] * x4
-#         )
-#         a, b, c, d = NUTATION_ABCD_ARRAY[row]
-#         delta_psi += (a + b * jce) * np.sin(arg)
-#         delta_eps += (c + d * jce) * np.cos(arg)
-#     delta_psi *= (1.0 / 36000000)
-#     delta_eps *= (1.0 / 36000000)
-#     # seems like we ought to be able to return a tuple here instead
-#     # of resorting to `out`, but returning a UniTuple from this
-#     # function caused calculations elsewhere to give the wrong result.
-#     # very difficult to investigate since it did not occur when using
-#     # object mode.  issue was observed on numba 0.56.4
-#     return delta_psi, delta_eps
-#     # out[0] = delta_psi
-#     # out[1] = delta_eps
-
-
-
 
 def true_ecliptic_obliquity(mean_ecliptic_obliquity, obliquity_nutation):
     e0 = mean_ecliptic_obliquity
@@ -682,27 +595,12 @@ cdef _termination_point(
     float observer_elevation,
 ):
     # cdef NDArray[F64, ndim=3] u, x, y
-    u = np.arctan(0.99664719 * np.tan(np.radians(observer_latitude)))#[None, ...]
+    u = np.arctan(0.99664719 * np.tan(np.radians(observer_latitude)))
     x = np.cos(u) + observer_elevation / 6378140 * np.cos(np.radians(observer_latitude))
     y = 0.99664719 * np.sin(u) + observer_elevation / 6378140 * np.sin(np.radians(observer_latitude))
     return x, y
 
-# def uterm(observer_latitude):
-#     u = np.arctan(0.99664719 * np.tan(np.radians(observer_latitude)))
-#     return u
 
-
-
-# def xterm(u, observer_latitude, observer_elevation):
-#     x = (np.cos(u) + observer_elevation / 6378140 * np.cos(np.radians(observer_latitude)))
-#     return x
-
-
-
-# def yterm(u, observer_latitude, observer_elevation):
-#     y = (0.99664719 * np.sin(u) + observer_elevation / 6378140 * np.sin(np.radians(observer_latitude)))
-#     return y
-    
 cdef _parallax_sun_right_ascension(
     NDArray[F64, ndim=3] xterm, 
     NDArray[F64, ndim=3] equatorial_horizontal_parallax, 
@@ -798,8 +696,9 @@ cdef _atmospheric_refraction_correction(
         )
     ) * (elevation_angle >= -1.0 * (0.26667 + atmos_refract))
     return delta_e
-
-
+# =============================================================================
+# - topocentric
+# =============================================================================
 cdef _topocentric_elevation_angle(
     NDArray[F64, ndim=3] topocentric_elevation_angle_without_atmosphere, 
     NDArray[F64, ndim=3] atmospheric_refraction_correction,
@@ -834,7 +733,8 @@ cdef _topocentric_azimuth_angle(
 
 
 # =============================================================================
-
+# - julian
+# =============================================================================
 cdef _julian_day(
     NDArray[F64, ndim=3] unixtime
 ):
