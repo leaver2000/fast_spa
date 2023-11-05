@@ -1,30 +1,31 @@
 # distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 # pyright: reportGeneralTypeIssues=false, reportMissingImports=false
+
+
+
+
 cimport cython
 from cython.parallel cimport prange
-
-from libc.math cimport cos
-
-cimport numpy as cnp
 from numpy cimport float32_t as f32, float64_t as f64, ndarray as NDArray
 import numpy as np
+cimport libc.math as math
 
-cnp.import_array()
+
+cdef double deg2rad(double deg) noexcept nogil: # type: ignore
+    return deg * math.pi / 180
+
+# cdef double rad2deg(double rad) noexcept nogil:
+#     return rad * 180 / math.pi
 
 
 # =============================================================================
-# Julian Day Conversion
+# 3.1. Calculate the Julian and Julian Ephemeris Day, Century, and Millennium: 
 # =============================================================================
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef _julian_day(NDArray[f64, ndim=1] ut):
     cdef NDArray[f64, ndim=1] jd
     jd = ut * 1.0 / 86400 + 2440587.5
-    return jd
-
-def julian_day(NDArray[f64, ndim=1] ut):
-    cdef NDArray[f64, ndim=1] jd
-    jd = _julian_day(ut)
     return jd
 
 @cython.boundscheck(False)
@@ -34,6 +35,8 @@ cdef _julian_century(NDArray[f64, ndim=1] jd):
     jc = (jd - 2451545) * 1.0 / 36525
     return jc
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
 def julian_century(NDArray[f64, ndim=1] ut):
     cdef NDArray[f64, ndim=1] jd, jc
     jd = _julian_day(ut)
@@ -48,7 +51,11 @@ cdef _julian_ephemeris_day(NDArray[f64, ndim=1] jd, delta_t):
     jde = jd + delta_t * 1.0 / 86400
     return jde
 
-def julian_ephemeris_day(NDArray[f64, ndim=1] ut, delta_t):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def julian_ephemeris_day(
+    NDArray[f64, ndim=1] ut, NDArray[f64, ndim=1] delta_t
+):
     cdef NDArray[f64, ndim=1] jd, jde
     jd = _julian_day(ut)
     jde = _julian_ephemeris_day(jd, delta_t)
@@ -61,7 +68,11 @@ cdef _julian_ephemeris_century(NDArray[f64, ndim=1] jde):
     jce = (jde - 2451545) * 1.0 / 36525
     return jce
 
-def julian_ephemeris_century(NDArray[f64, ndim=1] ut, delta_t):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def julian_ephemeris_century(
+    NDArray[f64, ndim=1] ut, NDArray[f64, ndim=1] delta_t
+):
     cdef NDArray[f64, ndim=1] jd, jde, jce
     jd = _julian_day(ut)
     jde = _julian_ephemeris_day(jd, delta_t)
@@ -75,7 +86,9 @@ cdef _julian_ephemeris_millennium(NDArray[f64, ndim=1] jce):
     jme = jce * 1.0 / 10
     return jme
 
-def julian_ephemeris_millennium(NDArray[f64, ndim=1] ut,  delta_t):
+@cython.boundscheck(False)
+@cython.wraparound(False)
+def julian_ephemeris_millennium(NDArray[f64, ndim=1] ut, NDArray[f64, ndim=1] delta_t):
     cdef NDArray[f64, ndim=1] jd, jde, jce, jme
     jd = _julian_day(ut)
     jde = _julian_ephemeris_day(jd, delta_t)
@@ -85,12 +98,20 @@ def julian_ephemeris_millennium(NDArray[f64, ndim=1] ut,  delta_t):
 
 def unix_time(x):
     cdef NDArray[f64, ndim=1] ut
-    ut = np.asanyarray(x, dtype="datetime64[ns]").ravel().astype(np.float64) // 1e9
-    return ut
+    out = np.asanyarray(
+        x, dtype="datetime64[ns]").ravel().astype(np.float64
+    ) // 1e9
+    return out
+# =============================================================================
+# 3.2. Calculate the Earth heliocentric longitude, latitude, and radius vector 
+# (L, B, and R): 
+# =============================================================================
 
 # =============================================================================
 #  Table A4.2. Earth Periodic Terms
 # =============================================================================
+cdef double[:, :] L0, L1, L2, L3, L4, L5, B0, B1, B2, B3, B4, B5, R1, R2, R3, R4, R5
+# HELIOCENTRIC LONGITUDE TERMS
 L0 = np.array(
     [
         [175347046.0, 0.0, 0.0],
@@ -157,8 +178,8 @@ L0 = np.array(
         [30.0, 0.44, 83996.85],
         [30.0, 2.74, 1349.87],
         [25.0, 3.16, 4690.48],
-    ],
-    dtype=np.float64,
+    ], 
+    dtype=np.float64
 )
 L1 = np.array(
     [
@@ -196,8 +217,8 @@ L1 = np.array(
         [8.0, 5.3, 2352.87],
         [6.0, 2.65, 9437.76],
         [6.0, 4.67, 4690.48],
-    ],
-    dtype=np.float64,
+    ], 
+    dtype=np.float64
 )
 L2 = np.array(
     [
@@ -221,8 +242,8 @@ L2 = np.array(
         [3.0, 2.28, 553.57],
         [2.0, 4.38, 5223.69],
         [2.0, 3.75, 0.98],
-    ],
-    dtype=np.float64,
+    ], 
+    dtype=np.float64
 )
 L3 = np.array(
     [
@@ -237,37 +258,40 @@ L3 = np.array(
 )
 L4 = np.array(
     [
-        [114.0, 3.142, 0.0],
-        [8.0, 4.13, 6283.08],
-        [1.0, 3.84, 12566.15],
-    ],
-    dtype=np.float64,
+        [114.0, 3.142, 0.0], 
+        [8.0, 4.13, 6283.08], 
+        [1.0, 3.84, 12566.15]
+    ], 
+    dtype=np.float64
 )
 L5 = np.array(
     [
-        [1.0, 3.14, 0.0],
+        [1.0, 3.14, 0.0]
     ],
-    dtype=np.float64,
+    dtype=np.float64
 )
-# -
+
+# HELIOCENTRIC LATITUDE TERMS
 B0 = np.array(
     [
-        [280.0, 3.199, 84334.662],
-        [102.0, 5.422, 5507.553],
-        [80.0, 3.88, 5223.69],
-        [44.0, 3.7, 2352.87],
-        [32.0, 4.0, 1577.34],
-    ],
-    dtype=np.float64,
+        [280.0,     3.199,  84334.662],
+        [102.0,     5.422,  5507.553],
+        [80.0,      3.88,   5223.69],
+        [44.0,      3.7,    2352.87],
+        [32.0,      4.0,    1577.34]
+    ], 
+    dtype=np.float64
 )
 B1 = np.array(
     [
-        [9.0, 3.9, 5507.55],
-        [6.0, 1.73, 5223.69],
-    ],
-    dtype=np.float64,
+        [9.0, 3.9, 5507.55], 
+        [6.0, 1.73, 5223.69]
+    ], 
+    dtype=np.float64
 )
-# - heliocentric radius coefficients
+
+
+# HELIOCENTRIC RADIUS TERMS
 R0 = np.array(
     [
         [100013989.0, 0.0, 0.0],
@@ -310,8 +334,8 @@ R0 = np.array(
         [28.0, 1.21, 6286.6],
         [28.0, 1.9, 6279.55],
         [26.0, 4.59, 10447.39],
-    ],
-    dtype=np.float64,
+    ], 
+    dtype=np.float64
 )
 R1 = np.array(
     [
@@ -326,7 +350,7 @@ R1 = np.array(
         [9.0, 1.42, 6275.96],
         [9.0, 0.27, 5486.78],
     ],
-    dtype=np.float64,
+    dtype=np.float64
 )
 R2 = np.array(
     [
@@ -336,46 +360,43 @@ R2 = np.array(
         [9.0, 3.63, 77713.77],
         [6.0, 1.87, 5573.14],
         [3.0, 5.47, 18849.23],
-    ],
-    dtype=np.float64,
+    ], dtype=np.float64
 )
-R3 = np.array(
-    [
-        [145.0, 4.273, 6283.076],
-        [7.0, 3.92, 12566.15],
-    ],
-    dtype=np.float64,
-)
-R4 = np.array(
-    [
-        [4.0, 2.56, 6283.08],
-    ],
-    dtype=np.float64,
-)
+R3 = np.array([[145.0, 4.273, 6283.076], [7.0, 3.92, 12566.15]], dtype=np.float64)
+R4 = np.array([[4.0, 2.56, 6283.08]], dtype=np.float64)
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef _term_calc(double[:,:] terms, double[:] jme):
-    """
-    >>> cdef double[:] input_ = np.arange(100, dtype=np.float64)
-    """
-    cdef int i, j, n_terms, n_jme
+cdef NDArray _term_calc(
+    double[:, :] terms, double[:] jme, int power = 0
+):
+    cdef int i, j, n_term, n_jme
     cdef double A, B, C, JME
     cdef NDArray[f64, ndim=1] out
-    n_terms = len(terms)
+    n_term = len(terms)
     n_jme = len(jme)
     out = np.zeros_like(jme, dtype=np.float64)
-    for i in prange(n_terms, nogil=True):
-        for j in range(n_jme):
-            A, B, C = terms[i, 0], terms[i, 1], terms[i, 2]
-            JME = jme[j]
-            out[j] += A * cos(B + C * JME)
-            
+    if power == 0:
+        for i in prange(n_term, nogil=True):
+            for j in range(n_jme):
+                A, B, C = terms[i, 0], terms[i, 1], terms[i, 2]
+                JME = jme[j]
+                out[j] += A * math.cos(B + C * JME)
+    else:
+        for i in prange(n_term, nogil=True):
+            for j in range(n_jme):
+                A, B, C = terms[i, 0], terms[i, 1], terms[i, 2]
+                JME = jme[j]
+                out[j] += (A * math.cos(B + C * JME)) * JME**power
+
     return out
+
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef _earth_heliocentric_longitude_latitude_and_radius_vector(NDArray[f64, ndim=1] jme):
+cdef tuple[NDArray, NDArray, NDArray] _earth_heliocentric_longitude_latitude_and_radius_vector(double[:] jme):
     """
     3.2.	 Calculate the Earth heliocentric longitude, latitude, and radius vector (L, B, # and R): 
     “Heliocentric” means that the Earth position is calculated with respect to the center of the sun. 
@@ -392,32 +413,225 @@ cdef _earth_heliocentric_longitude_latitude_and_radius_vector(NDArray[f64, ndim=
     where n is the number of rows for the term L0 in Table A4.2. 
     3.2.3. Calculate the terms L1, L2, L3, L4, and L5 by using Equations 9 and 10 and 
     changing the 0 to 1, 2, 3, 4, and 5, and by using their corresponding values in"""
-    # cdef NDArray L, B, R, l0, l1, l2, l3, l4, l5, b0, b1, r0, r1, r2, r3, r4
-    cdef double[:] jme_view = jme
-    l0 = _term_calc(L0, jme_view)
-    l1 = _term_calc(L1, jme_view)
-    l2 = _term_calc(L2, jme_view)
-    l3 = _term_calc(L3, jme_view)
-    l4 = _term_calc(L4, jme_view)
-    l5 = _term_calc(L5, jme_view)
-    L = np.rad2deg(
-        (l0 + l1 * jme + l2 * jme**2 + l3 * jme**3 + l4 * jme**4 + l5 * jme**5) / 1e8
-    ) % 360
+    cdef NDArray[f64, ndim=1] L, B, R, l0, l1, l2, l3, l4, l5, b0, b1, r0, r1, r2, r3, r4
 
-    b0 = _term_calc(B0, jme_view)
-    b1 = _term_calc(B1, jme_view)
-    B = np.rad2deg((b0 + b1 * jme) / 1e8)
+    l0 = _term_calc(L0, jme)
+    l1 = _term_calc(L1, jme, power=1)
+    l2 = _term_calc(L2, jme, power=2)
+    l3 = _term_calc(L3, jme, power=3)
+    l4 = _term_calc(L4, jme, power=4)
+    l5 = _term_calc(L5, jme, power=5)
+    L = np.rad2deg(np.sum([l0, l1, l2, l3, l4, l5], axis=0) / 1e8) % 360
+
+    b0 = _term_calc(B0, jme)
+    b1 = _term_calc(B1, jme, power=1)
+    B = np.rad2deg((b0 + b1) / 1e8)
 
     # - radius vector (R) in astronomical units (AU)
-    r0 = _term_calc(R0, jme_view)
-    r1 = _term_calc(R1, jme_view)
-    r2 = _term_calc(R2, jme_view)
-    r3 = _term_calc(R3, jme_view)
-    r4 = _term_calc(R4, jme_view)
+    r0 = _term_calc(R0, jme)
+    r1 = _term_calc(R1, jme, power=1)
+    r2 = _term_calc(R2, jme, power=2)
+    r3 = _term_calc(R3, jme, power=3)
+    r4 = _term_calc(R4, jme, power=4)
+    R = np.sum([r0, r1, r2, r3, r4], axis=0) / 1e8
 
-    R = (r0 + r1 * jme + r2 * jme**2 + r3 * jme**3 + r4 * jme**4) / 1e8
-    
     return L, B, R
+
+# =============================================================================
+# 3.4. Calculate the nutation in longitude and obliquity ()R and )g):
+# Table A4.3. Periodic Terms for the Nutation in Longitude and Obliquity 
+# =============================================================================
+cdef double[:, :] LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS, LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS
+
+# e Nutation in Longitude and Obliquity
+LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS = np.array(
+    [   # Y0 Y1 Y2 Y3 Y4
+        [0, 0, 0, 0, 1],
+        [-2, 0, 0, 2, 2],
+        [0, 0, 0, 2, 2],
+        [0, 0, 0, 0, 2],
+        [0, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0],
+        [-2, 1, 0, 2, 2],
+        [0, 0, 0, 2, 1],
+        [0, 0, 1, 2, 2],
+        [-2, -1, 0, 2, 2],
+        [-2, 0, 1, 0, 0],
+        [-2, 0, 0, 2, 1],
+        [0, 0, -1, 2, 2],
+        [2, 0, 0, 0, 0],
+        [0, 0, 1, 0, 1],
+        [2, 0, -1, 2, 2],
+        [0, 0, -1, 0, 1],
+        [0, 0, 1, 2, 1],
+        [-2, 0, 2, 0, 0],
+        [0, 0, -2, 2, 1],
+        [2, 0, 0, 2, 2],
+        [0, 0, 2, 2, 2],
+        [0, 0, 2, 0, 0],
+        [-2, 0, 1, 2, 2],
+        [0, 0, 0, 2, 0],
+        [-2, 0, 0, 2, 0],
+        [0, 0, -1, 2, 1],
+        [0, 2, 0, 0, 0],
+        [2, 0, -1, 0, 1],
+        [-2, 2, 0, 2, 2],
+        [0, 1, 0, 0, 1],
+        [-2, 0, 1, 0, 1],
+        [0, -1, 0, 0, 1],
+        [0, 0, 2, -2, 0],
+        [2, 0, -1, 2, 1],
+        [2, 0, 1, 2, 2],
+        [0, 1, 0, 2, 2],
+        [-2, 1, 1, 0, 0],
+        [0, -1, 0, 2, 2],
+        [2, 0, 0, 2, 1],
+        [2, 0, 1, 0, 0],
+        [-2, 0, 2, 2, 2],
+        [-2, 0, 1, 2, 1],
+        [2, 0, -2, 0, 1],
+        [2, 0, 0, 0, 1],
+        [0, -1, 1, 0, 0],
+        [-2, -1, 0, 2, 1],
+        [-2, 0, 0, 0, 1],
+        [0, 0, 2, 2, 1],
+        [-2, 0, 2, 0, 1],
+        [-2, 1, 0, 2, 1],
+        [0, 0, 1, -2, 0],
+        [-1, 0, 1, 0, 0],
+        [-2, 1, 0, 0, 0],
+        [1, 0, 0, 0, 0],
+        [0, 0, 1, 2, 0],
+        [0, 0, -2, 2, 2],
+        [-1, -1, 1, 0, 0],
+        [0, 1, 1, 0, 0],
+        [0, -1, 1, 2, 2],
+        [2, -1, -1, 2, 2],
+        [0, 0, 3, 2, 2],
+        [2, -1, 0, 2, 2],
+    ], 
+    dtype=np.float64
+)
+
+LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS = np.array(
+    [   # A B C D
+        [-171996, -174.2, 92025, 8.9],
+        [-13187, -1.6, 5736, -3.1],
+        [-2274, -0.2, 977, -0.5],
+        [2062, 0.2, -895, 0.5],
+        [1426, -3.4, 54, -0.1],
+        [712, 0.1, -7, 0],
+        [-517, 1.2, 224, -0.6],
+        [-386, -0.4, 200, 0],
+        [-301, 0, 129, -0.1],
+        [217, -0.5, -95, 0.3],
+        [-158, 0, 0, 0],
+        [129, 0.1, -70, 0],
+        [123, 0, -53, 0],
+        [63, 0, 0, 0],
+        [63, 0.1, -33, 0],
+        [-59, 0, 26, 0],
+        [-58, -0.1, 32, 0],
+        [-51, 0, 27, 0],
+        [48, 0, 0, 0],
+        [46, 0, -24, 0],
+        [-38, 0, 16, 0],
+        [-31, 0, 13, 0],
+        [29, 0, 0, 0],
+        [29, 0, -12, 0],
+        [26, 0, 0, 0],
+        [-22, 0, 0, 0],
+        [21, 0, -10, 0],
+        [17, -0.1, 0, 0],
+        [16, 0, -8, 0],
+        [-16, 0.1, 7, 0],
+        [-15, 0, 9, 0],
+        [-13, 0, 7, 0],
+        [-12, 0, 6, 0],
+        [11, 0, 0, 0],
+        [-10, 0, 5, 0],
+        [-8, 0, 3, 0],
+        [7, 0, -3, 0],
+        [-7, 0, 0, 0],
+        [-7, 0, 3, 0],
+        [-7, 0, 3, 0],
+        [6, 0, 0, 0],
+        [6, 0, -3, 0],
+        [6, 0, -3, 0],
+        [-6, 0, 3, 0],
+        [-6, 0, 3, 0],
+        [5, 0, 0, 0],
+        [-5, 0, 3, 0],
+        [-5, 0, 3, 0],
+        [-5, 0, 3, 0],
+        [4, 0, 0, 0],
+        [4, 0, 0, 0],
+        [4, 0, 0, 0],
+        [-4, 0, 0, 0],
+        [-4, 0, 0, 0],
+        [-4, 0, 0, 0],
+        [3, 0, 0, 0],
+        [-3, 0, 0, 0],
+        [-3, 0, 0, 0],
+        [-3, 0, 0, 0],
+        [-3, 0, 0, 0],
+        [-3, 0, 0, 0],
+        [-3, 0, 0, 0],
+        [-3, 0, 0, 0],
+    ], 
+    dtype=np.float64
+)
+assert len(LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS) == len(LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS)
+cdef int NUM_LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS = len(LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS)
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef tuple[NDArray, NDArray] _calculate_the_nutation_in_longitude_and_obliquity(double[:] jce):
+    """3.4. Calculate the nutation in longitude and obliquity ()R and )g)"""
+    cdef int i, j, n_jce
+    cdef double JCE, A, B, C, D, X0, X1, X2, X3, X4, Y0, Y1, Y2, Y3, Y4, rads
+    cdef double[:] delta_psi, delta_eps
+
+    n_jce = len(jce)
+
+    delta_psi = np.zeros_like(jce)
+    delta_eps = np.zeros_like(jce)
+
+    for i in prange(NUM_LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS, nogil=True):
+        Y0 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 0]
+        Y1 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 1]
+        Y2 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 2]
+        Y3 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 3]
+        Y4 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 4]
+        A = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 0]
+        B = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 1]
+        C = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 2]
+        D = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 3]
+
+        for j in range(n_jce):
+            JCE = jce[j]
+            # 3.4.1. Calculate the mean elongation of the moon from the sun, X0 (in degrees)
+            X0 = 297.85036 + 445_267.111480 * JCE - 0.0019142 * JCE**2 + JCE**3 / 189_474
+            
+            # 3.4.2. Calculate the mean anomaly of the sun (Earth), X1 (in degrees)
+            X1 = 357.52772 + 35999.050340 * JCE - 0.0001603 * JCE**2 - JCE**3 / 3e5
+            
+            # 3.4.3. Calculate the mean anomaly of the moon, X2 (in degrees)
+            X2 = 134.96298 + 477_198.867398 * JCE + 0.0086972 * JCE**2 + JCE**3 / 56_250
+            
+            # 3.4.4. Calculate the moon’s argument of latitude, X3 (in degrees)
+            X3 = 93.27191 + 483_202.017538 * JCE - 0.0036825 * JCE**2 + JCE**3 / 327_270
+            
+            # 3.4.5. Calculate the longitude of the ascending node of the moon’s mean orbit on the
+            # ecliptic, measured from the mean equinox of the date, X4 (in degrees)
+            X4 = 125.04452 - 1_934.136261 * JCE + 0.0020708 * JCE**2 + JCE**3 / 45e4
+            rads = deg2rad(Y0 * X0 + Y1 * X1 + Y2 * X2 + Y3 * X3 + Y4 * X4)
+
+            # 3.4.6. For each row in Table A4.3, calculate the terms )Ri and )gi (in 0.0001of arc seconds)
+            delta_psi[j] += ((A + B * JCE) * math.sin(rads) * 1.0 / 36e6)
+            delta_eps[j] += ((C + D * JCE) * math.cos(rads) * 1.0 / 36e6)
+
+    return delta_psi, delta_eps
 
 # =============================================================================
 cdef _fast_spa(
@@ -440,6 +654,7 @@ cdef _fast_spa(
     jme = _julian_ephemeris_millennium(jce)
     # 
     L, B, R = _earth_heliocentric_longitude_latitude_and_radius_vector(jme)
+    delta_psi, delta_epsilon = _calculate_the_nutation_in_longitude_and_obliquity(jce)
     return L, B, R
 
 def fast_spa(

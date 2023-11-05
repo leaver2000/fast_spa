@@ -14,7 +14,11 @@ ctypedef cnp.float64_t F64
 # ctypedef fused FloatTypes:
 #     double
 #     float
+# type def of tuple of NDArray[f64, ndim=1] LBR
+# ctypedef tuple LBR:
+#     NDArray[F64, ndim=1]
 
+# typedef tuple of NDArray[f64, ndim=1] LBR
 DTYPE = np.float64
 # Table A4.2. Earth Periodic Terms 
 L0 = np.array(
