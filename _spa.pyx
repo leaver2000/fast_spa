@@ -636,17 +636,18 @@ cdef tuple[NDArray, NDArray] _calculate_the_nutation_in_longitude_and_obliquity(
 @cython.boundscheck(False)
 @cython.boundscheck(False)
 cdef double[:] _true_obliquity_of_the_ecliptic(double[:] jme, double[:] delta_eps):
-    cdef int i, n_jme
-    cdef double U, e0
-    cdef double[:] e
+    cdef int i, n
+    cdef double U, E0
+    cdef double[:] E
 
-    n_jme = len(jme)
-    e = np.zeros_like(jme)
+    n = len(jme)
+    E = np.zeros_like(jme) # ε
 
-    for i in prange(n_jme, nogil=True):
-        U = jme[i] / 10
-        # mean
-        e0 = (
+    for i in prange(n, nogil=True):
+        U = jme[i] / 10                 # U = JME / 10
+        deltaE = delta_eps[i] / 3600    # ∆ε = ∆ε / 3600
+        
+        E0 = (
             84381.448 - 4680.93 * U 
             - 1.55 * U**2 
             + 1999.25 * U**3 
@@ -657,10 +658,10 @@ cdef double[:] _true_obliquity_of_the_ecliptic(double[:] jme, double[:] delta_ep
             + 27.87 * U**8 
             + 5.79 * U**9 
             + 2.45 * U**10
-        )
-        e[i] = e0 * 1.0 / 3600 + delta_eps[i]
+        ) #  ε0 = 84381448 − . U − 155 U 2 + . 3 . 4680 93 . 1999 25 U −  4 5 6 7 5138 . U − 249 67 . U − 39 05 . U + 712 . U + (24)# 89 10
+        E[i] = E0 * 1.0 / 3600 + deltaE # ε = ε0 / 3600 + ∆ε
     
-    return e
+    return E
 
 # =============================================================================
 # Right Ascension and Declination
@@ -668,25 +669,35 @@ cdef double[:] _true_obliquity_of_the_ecliptic(double[:] jme, double[:] delta_ep
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef tuple[double, double]_geocentric_right_assension_and_declination(
-    double apparent_sun_lon, 
+    double apparent_sun_lon,
     double geocentric_lat, 
     double true_ecliptic_obliquity
 ) noexcept nogil:
     cdef double A, B, E, a, b
-    # in radians
-    A = deg2rad(apparent_sun_lon)
-    B = deg2rad(geocentric_lat)
-    E = deg2rad(true_ecliptic_obliquity)
+
+    # - in radians
+    A = deg2rad(apparent_sun_lon)           # λ
+    B = deg2rad(geocentric_lat)             # β
+    E = deg2rad(true_ecliptic_obliquity)    # ε
 
     # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
-    a = atan2(sin(A) *cos(E) - tan(B) * sin(E), cos(A))
+    a = atan2(sin(A) * cos(E) - tan(B) * sin(E), cos(A))
+
     # δ = Arcsin(sin β *cos ε + cos β *sin ε *sin λ)
     b = asin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
     
-    # in degrees
-    a = rad2deg(a) % 360.0
-    b = rad2deg(b)
+    # - in degrees
+    a = rad2deg(a) % 360.0  # α
+    b = rad2deg(b)          # δ
+
     return a, b
+
+
+
+# =============================================================================
+# 3.7. Calculate the apparent sun longitude (in degrees)
+# =============================================================================
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -694,7 +705,7 @@ cdef tuple[double[:], double[:]]_calculate_the_right_ascension_and_declination(
     double[:] heliocentric_lon,                 # L
     double[:] heliocentric_lat,                 # B
     double[:] heliocentric_rv,                  # R
-    double[:] true_obliquity_of_the_ecliptic,   # E 
+    double[:] true_obliquity_of_the_ecliptic,   # ε
     double[:] nutation_in_longitude,            # ∆ψ
 ):
     cdef int i, n
@@ -702,23 +713,25 @@ cdef tuple[double[:], double[:]]_calculate_the_right_ascension_and_declination(
     cdef double[:] ra, dec
 
     n = len(heliocentric_lon)
-    ra = np.zeros(n, dtype=np.float64)
-    dec = np.zeros(n, dtype=np.float64)
+    ra = np.zeros(n, dtype=np.float64)  # α
+    dec = np.zeros(n, dtype=np.float64) # δ
+
     for i in prange(n, nogil=True):
         L = heliocentric_lon[i]
         B = heliocentric_lat[i]
         R = heliocentric_rv[i]
         E = true_obliquity_of_the_ecliptic[i]
 
+        
         # 3.7. Calculate the apparent sun longitude (in degrees)
-        # λ = Θ + ∆ψ + ∆ τ
         Lambda = (
             # 3.3.1. Calculate the geocentric longitude (in degrees)
             (L + 180.0) % 360.0         # Θ = L + 180 
             + nutation_in_longitude[i]  # ∆ψ
             # 3.6.	 Calculate the aberration correction (in degrees)
-            + (-20.4898 / (3600.0 * R))   # ∆τ = − 26.4898 / 3600 * R 
-        )
+            + (-20.4898 / (3600.0 * R)) # ∆τ = − 26.4898 / 3600 * R 
+        ) # λ = Θ + ∆ψ + ∆ τ
+
         ra[i], dec[i] = _geocentric_right_assension_and_declination(
             Lambda, 
             B * -1.0, # geocentric_latitude 
@@ -734,7 +747,7 @@ def _fast_spa(ut, delta_t):
     jce = _julian_century(jd)
     jme = _julian_ephemeris_millennium(jce)
 
-    # 3.5. Calculate the true obliquity of the ecliptic
+    # 3.2. Calculate the Earth heliocentric longitude, latitude, and radius vector (L, B, # and R):
     L, B, R = _calcualte_the_earth_heliocentric_longitude_latitude_and_radius_vector(jme)
     
     # 3.4. Calculate the nutation in longitude and obliquity
@@ -745,7 +758,7 @@ def _fast_spa(ut, delta_t):
     # 3.5. Calculate the true obliquity of the ecliptic
     e = _true_obliquity_of_the_ecliptic(jme, delta_epsilon)
 
-    # 3.6-3.7.	 Calculate the apparent sun longitude, 8 (in degrees): 
+    # 3.3, 3.6, 3.7.	 Calculate the apparent sun longitude, 8 (in degrees): 
     alpha, delta = _calculate_the_right_ascension_and_declination(L, B, R, e, delta_psi)
     return alpha, delta    
 
