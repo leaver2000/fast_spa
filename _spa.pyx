@@ -1,21 +1,17 @@
 # distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 # pyright: reportGeneralTypeIssues=false, reportMissingImports=false
-
-
-
-
 cimport cython
 from cython.parallel cimport prange
 from numpy cimport float32_t as f32, float64_t as f64, ndarray as NDArray
 import numpy as np
 cimport libc.math as math
+from libc.math cimport sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan
 
-
-cdef double deg2rad(double deg) noexcept nogil: # type: ignore
+cdef double deg2rad(double deg) noexcept nogil:
     return deg * math.pi / 180
 
-# cdef double rad2deg(double rad) noexcept nogil:
-#     return rad * 180 / math.pi
+cdef double rad2deg(double rad) noexcept nogil:
+    return rad * 180 / math.pi
 
 
 # =============================================================================
@@ -368,9 +364,7 @@ R4 = np.array([[4.0, 2.56, 6283.08]], dtype=np.float64)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef NDArray _term_calc(
-    double[:, :] terms, double[:] jme, int power = 0
-):
+cdef NDArray _term_calc(double[:, :] terms, double[:] jme, int power = 0):
     cdef int i, j, n_term, n_jme
     cdef double A, B, C, JME
     cdef NDArray[f64, ndim=1] out
@@ -380,23 +374,26 @@ cdef NDArray _term_calc(
     if power == 0:
         for i in prange(n_term, nogil=True):
             for j in range(n_jme):
-                A, B, C = terms[i, 0], terms[i, 1], terms[i, 2]
+                A = terms[i, 0]
+                B = terms[i, 1]
+                C = terms[i, 2]
                 JME = jme[j]
-                out[j] += A * math.cos(B + C * JME)
+                out[j] += A * cos(B + C * JME)
     else:
         for i in prange(n_term, nogil=True):
             for j in range(n_jme):
-                A, B, C = terms[i, 0], terms[i, 1], terms[i, 2]
+                A = terms[i, 0]
+                B = terms[i, 1]
+                B = terms[i, 2]
                 JME = jme[j]
-                out[j] += (A * math.cos(B + C * JME)) * JME**power
+                out[j] += (A * cos(B + C * JME)) * JME**power
 
     return out
 
 
-
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef tuple[NDArray, NDArray, NDArray] _earth_heliocentric_longitude_latitude_and_radius_vector(double[:] jme):
+cdef tuple[NDArray, NDArray, NDArray] _calcualte_the_earth_heliocentric_longitude_latitude_and_radius_vector(double[:] jme):
     """
     3.2.	 Calculate the Earth heliocentric longitude, latitude, and radius vector (L, B, # and R): 
     “Heliocentric” means that the Earth position is calculated with respect to the center of the sun. 
@@ -628,58 +625,134 @@ cdef tuple[NDArray, NDArray] _calculate_the_nutation_in_longitude_and_obliquity(
             rads = deg2rad(Y0 * X0 + Y1 * X1 + Y2 * X2 + Y3 * X3 + Y4 * X4)
 
             # 3.4.6. For each row in Table A4.3, calculate the terms )Ri and )gi (in 0.0001of arc seconds)
-            delta_psi[j] += ((A + B * JCE) * math.sin(rads) * 1.0 / 36e6)
-            delta_eps[j] += ((C + D * JCE) * math.cos(rads) * 1.0 / 36e6)
+            delta_psi[j] += ((A + B * JCE) * sin(rads) * 1.0 / 36e6)
+            delta_eps[j] += ((C + D * JCE) * cos(rads) * 1.0 / 36e6)
 
     return delta_psi, delta_eps
 
 # =============================================================================
-cdef _fast_spa(
-    tuple[int, int, int, int] shape,
-    NDArray[f64, ndim=1] unixtime, 
-    NDArray[f64, ndim=2] lattitude, 
-    NDArray[f64, ndim=2] longitude, 
-    float elev, 
-    pressure, 
-    temp, 
-    delta_t, 
-    atmos_refract,
-    sst,
-    esd,
-):
-    jd = _julian_day(unixtime)
-    jde = julian_ephemeris_day(jd, delta_t)
-    jc = _julian_century(jd)
-    jce = _julian_ephemeris_century(jde)
-    jme = _julian_ephemeris_millennium(jce)
-    L, B, R = _earth_heliocentric_longitude_latitude_and_radius_vector(jme)
-    delta_psi, delta_epsilon = _calculate_the_nutation_in_longitude_and_obliquity(jce)
+# 3.5. Calculate the true obliquity of the ecliptic, g (in degrees):
+# =============================================================================
+@cython.boundscheck(False)
+@cython.boundscheck(False)
+cdef double[:] _true_obliquity_of_the_ecliptic(double[:] jme, double[:] delta_eps):
+    cdef int i, n_jme
+    cdef double U, e0
+    cdef double[:] e
+
+    n_jme = len(jme)
+    e = np.zeros_like(jme)
+
+    for i in prange(n_jme, nogil=True):
+        U = jme[i] / 10
+        # mean
+        e0 = (
+            84381.448 - 4680.93 * U 
+            - 1.55 * U**2 
+            + 1999.25 * U**3 
+            - 51.38 * U**4 
+            - 249.67 * U**5 
+            - 39.05 * U**6 
+            + 7.12 * U**7 
+            + 27.87 * U**8 
+            + 5.79 * U**9 
+            + 2.45 * U**10
+        )
+        e[i] = e0 * 1.0 / 3600 + delta_eps[i]
     
-    return L, B, R
+    return e
 
-def fast_spa(
-    unixtime,
-    lat,
-    lon,
-    elev, 
-    pressure, 
-    temp, 
-    delta_t, 
-    atmos_refract
+# =============================================================================
+# Right Ascension and Declination
+# =============================================================================
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef tuple[double, double]_geocentric_right_assension_and_declination(
+    double apparent_sun_lon, 
+    double geocentric_lat, 
+    double true_ecliptic_obliquity
+) noexcept nogil:
+    cdef double A, B, E, a, b
+    # in radians
+    A = deg2rad(apparent_sun_lon)
+    B = deg2rad(geocentric_lat)
+    E = deg2rad(true_ecliptic_obliquity)
+
+    # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
+    a = atan2(sin(A) *cos(E) - tan(B) * sin(E), cos(A))
+    # δ = Arcsin(sin β *cos ε + cos β *sin ε *sin λ)
+    b = asin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
+    
+    # in degrees
+    a = rad2deg(a) % 360.0
+    b = rad2deg(b)
+    return a, b
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef tuple[double[:], double[:]]_calculate_the_right_ascension_and_declination(
+    double[:] heliocentric_lon,                 # L
+    double[:] heliocentric_lat,                 # B
+    double[:] heliocentric_rv,                  # R
+    double[:] true_obliquity_of_the_ecliptic,   # E 
+    double[:] nutation_in_longitude,            # ∆ψ
 ):
+    cdef int i, n
+    cdef double L, B, R, E, Lambda
+    cdef double[:] ra, dec
 
-    assert lat.shape  == lon.shape
+    n = len(heliocentric_lon)
+    ra = np.zeros(n, dtype=np.float64)
+    dec = np.zeros(n, dtype=np.float64)
+    for i in prange(n, nogil=True):
+        L = heliocentric_lon[i]
+        B = heliocentric_lat[i]
+        R = heliocentric_rv[i]
+        E = true_obliquity_of_the_ecliptic[i]
 
-    return _fast_spa(
-        (5, len(unixtime),) + lon.shape,
-        unixtime, 
-        lat, 
-        lon, 
-        elev, 
-        pressure, 
-        temp, 
-        delta_t, 
-        atmos_refract, 
-        False,
-        False,
-    )
+        # 3.7. Calculate the apparent sun longitude (in degrees)
+        # λ = Θ + ∆ψ + ∆ τ
+        Lambda = (
+            # 3.3.1. Calculate the geocentric longitude (in degrees)
+            (L + 180.0) % 360.0         # Θ = L + 180 
+            + nutation_in_longitude[i]  # ∆ψ
+            # 3.6.	 Calculate the aberration correction (in degrees)
+            + (-20.4898 / (3600.0 * R))   # ∆τ = − 26.4898 / 3600 * R 
+        )
+        ra[i], dec[i] = _geocentric_right_assension_and_declination(
+            Lambda, 
+            B * -1.0, # geocentric_latitude 
+            E,
+        )
+
+    return ra, dec
+
+
+def _fast_spa(ut, delta_t):
+    jd = _julian_day(ut)
+    jde = _julian_ephemeris_day(jd, delta_t)
+    jce = _julian_century(jd)
+    jme = _julian_ephemeris_millennium(jce)
+
+    # 3.5. Calculate the true obliquity of the ecliptic
+    L, B, R = _calcualte_the_earth_heliocentric_longitude_latitude_and_radius_vector(jme)
+    
+    # 3.4. Calculate the nutation in longitude and obliquity
+    # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
+    # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )
+    delta_psi, delta_epsilon = _calculate_the_nutation_in_longitude_and_obliquity(jme)
+    
+    # 3.5. Calculate the true obliquity of the ecliptic
+    e = _true_obliquity_of_the_ecliptic(jme, delta_epsilon)
+
+    # 3.6-3.7.	 Calculate the apparent sun longitude, 8 (in degrees): 
+    alpha, delta = _calculate_the_right_ascension_and_declination(L, B, R, e, delta_psi)
+    return alpha, delta    
+
+def fast_spa(x):
+    dt = np.asanyarray(x, dtype="datetime64[ns]")
+    year = dt.astype("datetime64[Y]").astype(int) + 1970
+    month = dt.astype("datetime64[M]").astype(int) % 12 + 1
+    ut = dt.astype(np.float64) // 1e9
+    # delta_t = spa.calculate_deltat(year, month)
+    return _fast_spa(ut, delta_t)
