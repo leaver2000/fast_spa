@@ -418,6 +418,7 @@ cdef _earth_heliocentric_longitude_latitude_and_radius_vector(NDArray[f64, ndim=
     R = (r0 + r1 * jme + r2 * jme**2 + r3 * jme**3 + r4 * jme**4) / 1e8
     
     return L, B, R
+
 # =============================================================================
 cdef _fast_spa(
     tuple[int, int, int, int] shape,
