@@ -652,9 +652,9 @@ cdef _fast_spa(
     jc = _julian_century(jd)
     jce = _julian_ephemeris_century(jde)
     jme = _julian_ephemeris_millennium(jce)
-    # 
     L, B, R = _earth_heliocentric_longitude_latitude_and_radius_vector(jme)
     delta_psi, delta_epsilon = _calculate_the_nutation_in_longitude_and_obliquity(jce)
+    
     return L, B, R
 
 def fast_spa(
