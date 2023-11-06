@@ -4,7 +4,7 @@ from setuptools import Extension, setup
 from Cython.Build import cythonize
 import numpy as np
 
-# os.environ["TEST"] = "TRUE"
+os.environ["TEST"] = "TRUE"
 TEST = os.environ.get("TEST") == "TRUE"
 
 
@@ -18,26 +18,29 @@ if TEST:
     # and include the following trace macros
     define_macros.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
-
-extension_modules = [
-    Extension(
-        "fastspa.lib",
-        glob.glob("fastspa/*.pyx"),
-        include_dirs=[np.get_include(), 'fastspa/'],
-        define_macros=define_macros,
-        
-    ),
-    # Extension(
-    #     "fastspa.tab",
-    #     glob.glob("fastspa/tab.pyx"),
-    #     include_dirs=[np.get_include(), 'fastspa/'],
-    #     define_macros=define_macros,
-        
-    # ),
-]
-
-
-setup(
-    name="fastspa",
-    ext_modules=cythonize(extension_modules, compiler_directives=compiler_directives),
+include_dirs = [".", np.get_include()]
+extension_modules = cythonize(
+    [
+        Extension(
+            "fastspa.landscaping",
+            ["fastspa/landscaping.pyx"],
+            include_dirs=include_dirs,
+            define_macros=define_macros,
+        ),
+        Extension(
+            "fastspa.shrubbing",
+            ["fastspa/shrubbing.pyx"],
+            include_dirs=include_dirs,
+            define_macros=define_macros,
+        ),
+    ]
 )
+
+# from setuptools import setup
+# from Cython.Build import cythonize
+# extension_modules = cythonize("fastspa/*.pyx")
+# print(ext_modules[0])
+setup(ext_modules=extension_modules, define_macros=define_macros)
+#     ext_modules=cythonize("fastspa/*.pyx", define_macros=define_macros),
+#     # package_data={"fastspa": ["*.pxd"]},
+# )
