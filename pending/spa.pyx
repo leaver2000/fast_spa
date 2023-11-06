@@ -8,6 +8,8 @@ import numpy as np
 cimport libc.math as math
 from libc.math cimport sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan
 
+np.import_array()
+
 cdef double deg2rad(double deg) noexcept nogil: # type: ignore
     return deg * math.pi / 180
 
