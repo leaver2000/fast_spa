@@ -1,20 +1,17 @@
 # pyright: reportGeneralTypeIssues=false, reportMissingImports=false
 cimport cython
-cimport numpy as cnp
 
 import numpy as np
-# cimport _term
-# from _term cimport TermDish
+cimport numpy as cnp
 
-cimport tab
-from tab cimport spamdish
 cnp.import_array()
 
-cdef void prepare(spamdish *d):
-    d.oz_of_spam = 42
-    d.filler = otherstuff.oz_of_spam
 
-def serve():
-    cdef spamdish d
-    prepare(&d)
-    print(f'{d.oz_of_spam} oz spam, filler no. {d.filler}')
+cdef double[:,:] L0
+L0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float64)
+
+
+
+cdef double[:,:] get_tab(int n):
+    return L0
+

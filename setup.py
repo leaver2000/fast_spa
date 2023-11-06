@@ -1,4 +1,5 @@
 import os
+import glob
 from setuptools import Extension, setup
 from Cython.Build import cythonize
 import numpy as np
@@ -21,10 +22,18 @@ if TEST:
 extension_modules = [
     Extension(
         "fastspa.lib",
-        ["fastspa/lib.pyx", "fastspa/tab.pyx"],
-        include_dirs=[np.get_include(), "fastspa/"],
+        glob.glob("fastspa/*.pyx"),
+        include_dirs=[np.get_include(), 'fastspa/'],
         define_macros=define_macros,
+        
     ),
+    # Extension(
+    #     "fastspa.tab",
+    #     glob.glob("fastspa/tab.pyx"),
+    #     include_dirs=[np.get_include(), 'fastspa/'],
+    #     define_macros=define_macros,
+        
+    # ),
 ]
 
 

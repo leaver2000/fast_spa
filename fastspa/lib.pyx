@@ -1,16 +1,12 @@
 # pyright: reportGeneralTypeIssues=false, reportMissingImports=false
 
-import cython
-cimport numpy as cnp
-import numpy as np
-from . cimport tab
-# cimport _tabs
-# cdef _get_tab():
-#     return _tabs.L0
+cimport cython
 
-# cdef _get_tab():
-#     return tab.prepare
-#     ...
+# cimport tab
+cdef extern from "fastspa/tab.h":
+    double[:,:] get_tab(int n)
+cdef void f():
+    print(get_tab(1))
 
-def get_tab():
-    ...
+def yerp():
+    f()
