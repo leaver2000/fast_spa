@@ -1,10 +1,21 @@
 
+# distutils: define_macros=NPY_NO_DEPRECATED_API=NPY_1_7_API_VERSION
 # pyright: reportGeneralTypeIssues=false, reportMissingImports=false
+
+cimport numpy as cnp
 import numpy as np
+cnp.import_array()
+
+ctypedef double[:,:] TermView
+
+cdef TermView get_term() nogil:
+    cdef double[:, :] term = np.zeros((6, 4), dtype=np.float64)
+    return term
+
 # =====================================================================================================================
 #  Table A4.2. Earth Periodic Terms
 # =====================================================================================================================
-cdef double[:, :] L0, L1, L2, L3, L4, L5, B0, B1, B2, B3, B4, B5, R1, R2, R3, R4, R5
+cdef TermView L0, L1, L2, L3, L4, L5, B0, B1, B2, B3, B4, B5, R1, R2, R3, R4, R5
 # HELIOCENTRIC LONGITUDE TERMS
 L0 = np.array(
     [

@@ -19,28 +19,21 @@ if TEST:
     define_macros.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
 include_dirs = [".", np.get_include()]
-extension_modules = cythonize(
-    [
-        Extension(
-            "fastspa.landscaping",
-            ["fastspa/landscaping.pyx"],
-            include_dirs=include_dirs,
-            define_macros=define_macros,
-        ),
-        Extension(
-            "fastspa.shrubbing",
-            ["fastspa/shrubbing.pyx"],
-            include_dirs=include_dirs,
-            define_macros=define_macros,
-        ),
-    ]
-)
+extension_modules = [
+    Extension(
+        "fastspa._core",
+        ["fastspa/_core.pyx"],
+        include_dirs=include_dirs,
+        define_macros=define_macros,
+    ),
+    Extension(
+        "fastspa._lib",
+        ["fastspa/_lib.pyx"],
+        include_dirs=include_dirs,
+        define_macros=define_macros,
+    ),
+]
 
-# from setuptools import setup
-# from Cython.Build import cythonize
-# extension_modules = cythonize("fastspa/*.pyx")
-# print(ext_modules[0])
-setup(ext_modules=extension_modules, define_macros=define_macros)
-#     ext_modules=cythonize("fastspa/*.pyx", define_macros=define_macros),
-#     # package_data={"fastspa": ["*.pxd"]},
-# )
+setup(
+    ext_modules=cythonize(extension_modules, compiler_directives=compiler_directives),
+)

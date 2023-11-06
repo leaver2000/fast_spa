@@ -95,11 +95,9 @@ def julian_ephemeris_millennium(NDArray[f64, ndim=1] ut, NDArray[f64, ndim=1] de
     jme = _julian_ephemeris_millennium(jce)
     return jme
 
-def unix_time(x):
+def unixtime(x):
     cdef NDArray[f64, ndim=1] ut
-    out = np.asanyarray(
-        x, dtype="datetime64[ns]").ravel().astype(np.float64
-    ) // 1e9
+    out = np.asanyarray(x, dtype="datetime64[ns]").ravel().astype(np.float64) // 1e9
     return out
 # =====================================================================================================================
 # 3.2. Calculate the Earth heliocentric longitude, latitude, and radius vector 
@@ -401,7 +399,7 @@ cdef tuple[NDArray, NDArray, NDArray] _calculate_the_earth_heliocentric_longitud
     3.2.	 Calculate the Earth heliocentric longitude, latitude, and radius vector (L, B, # and R): 
     “Heliocentric” means that the Earth position is calculated with respect to the center of the sun. 
     3.2.1. For each row of Table A4.2, calculate the term L0i (in radians), 
-    L0 =	 A *cos ( B + C * JME) , (9) i i i i 
+    L0 =	 A * cos (B + C * JME) , (9) i i i i 
     where, 
     - i is the ith row for the term L0 in Table A4.2. 
     - Ai , Bi , and Ci are the values in the ith row and A, B, and C columns in Table 
