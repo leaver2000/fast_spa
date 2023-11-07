@@ -66,11 +66,12 @@ cdef double[:,:] get_time_components(double[:] unixtime, double[:] delta_t) noex
 
         # 3.6. Calculate the aberration correction (in degrees)
         DeltaT = -20.4898 / (R * 3600.0)                                        # ∆τ = − 26.4898 / 3600 * R 
+
         # 3.7. Calculate the apparent sun longitude (in degrees)
-        Lambda = (O + DeltaPSI + DeltaT) % 360.0                                     # λ = Θ + ∆ψ + ∆τ
+        Lambda = (O + DeltaPSI + DeltaT) % 360.0                                # λ = Θ + ∆ψ + ∆τ
+
         # 3.9.	 Calculate the geocentric sun right ascension, " (in degrees): 
         # 3.10.	 Calculate the geocentric sun declination, * (in degrees):
-        # geocentric sun declination
         alpha, delta = right_ascension_and_declination(
             Lambda,
             -B, # geocentric latitude
@@ -85,8 +86,6 @@ cdef double[:,:] get_time_components(double[:] unixtime, double[:] delta_t) noex
         # v0 = (280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * jc **2 - jc**3 / 38710000) % 360
         out[3, i] = apparent_sidereal_time_at_greenwich(jd, jc, E)
 
-        
-        
     return out
 
 
