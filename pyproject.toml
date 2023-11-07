@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=58.2.0", "wheel", "Cython>=0.29.23", "numpy>=1.23.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastspa"
+version = "0.0.1"
+description = "..."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+test = ["Cython >= 0.29.23", "pytest >= 7.2.0", "coverage >= 6.5.0"]
+lint = ["black", "flake8"]
+
+# add the package data for the pxd files
+# [options.package_data]
+# fastspa = ["*.pxd"]
+[tool.setuptools.package-data]
+fastspa = ["*.pxd"]
+
+# [tool.setuptools.packages.find]
+# where = ["src"]
