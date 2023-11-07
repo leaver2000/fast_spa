@@ -1,8 +1,11 @@
 
-import numpy as np
-cimport numpy as cnp
 cimport cython
 from cython.parallel cimport prange
+
+import numpy as np
+cimport numpy as cnp
+import itertools
+
 from ._lib cimport (
     polynomial_expression_for_delta_t,
     julian_day, 
@@ -22,11 +25,10 @@ from ._lib cimport (
 )
 
 from fastspa import _utils
+
 cnp.import_array()
+
 ctypedef unsigned long long u64
-
-
-
 
 @cython.boundscheck(False)
 @cython.boundscheck(False)
@@ -34,6 +36,7 @@ cdef double[:,:] get_time_components(double[:] unixtime, double[:] delta_t) noex
     cdef int n, i
     cdef double ut, dt, jd, jc, jde, jce, jme, L, B, R, O, DeltaPSI, DeltaE, E, DeltaT, Lambda, alpha, delta, v, v0
     cdef double[:, :] out
+
     n = len(unixtime)
     out = np.zeros((4, n), dtype=np.float64) # type: ignore
 
@@ -85,22 +88,43 @@ cdef double[:,:] get_time_components(double[:] unixtime, double[:] delta_t) noex
         
         
     return out
-import itertools
 
 
 @cython.boundscheck(False)
 cdef u64[:,:] _idxarray(tuple[u64, u64, u64, u64] shape) noexcept:
-    cdef u64 num_t, num_z, num_y, num_x
-    cdef u64[:, :] indicies_ 
-    num_t, num_z, num_y, num_x = shape
-    indicies_ = np.array(
-        list(itertools.product(range(num_t), range(num_z), range(num_y), range(num_x))),
+    cdef u64 T, Z, Y, X
+    cdef u64[:, :] indicies
+    T, Z, Y, X = shape 
+    indicies = np.array(
+        list(itertools.product(range(T), range(Z), range(Y), range(X))),
         dtype=np.uint64,
     ) # type: ignore
-    return indicies_
+
+    return indicies
+
+cdef double[:] _radius_vector(
+    double[:] unixtime,                 # T
+    double[:] delta_t,                  # T
+):
+    cdef int n, i
+    cdef double ut, dt, jme
+    cdef double[:] out
+
+    n = len(unixtime)
+    out = np.zeros((n,), dtype=np.float64) # type: ignore
+
+    for i in prange(n, nogil=True):
+        ut  = unixtime[i]
+        dt = delta_t[i]
+        jme = julian_ephemeris_millennium(julian_ephemeris_century(julian_ephemeris_day(ut, dt)))
+
+        # 3.2.	 Calculate the Earth heliocentric longitude, latitude, and radius vector (L, B, and R): 
+        out[i] = heliocentric_longitude_latitude_and_radius_vector(jme)[2]
+
+    return out
 
 
-cdef fast_spa(
+cdef _fast_spa(
     tuple[u64, u64, u64, u64] shape,    # (T, Z, Y, X)
     double[:] unixtime,                 # T
     double[:] delta_t,                  # T
@@ -152,18 +176,12 @@ cdef fast_spa(
 
     return out
 
-
-
-def main(
-    datetime_like
-):
-    from fastspa import _utils
+cdef prepare_datetime_like(datetime_like, apply_correction=False):
     dt = np.asanyarray(datetime_like, dtype="datetime64[ns]").ravel()
     ut = dt.astype(np.float64) // 1e9
     year = dt.astype("datetime64[Y]").astype(int) + 1970
     month = dt.astype("datetime64[M]").astype(int) % 12 + 1
-    delta_t = polynomial_expression_for_delta_t(year, month, False)
-
+    delta_t = polynomial_expression_for_delta_t(year, month, apply_correction)
     assert np.allclose(
         delta_t,
         _utils.calculate_deltat(
@@ -171,22 +189,57 @@ def main(
             dt.astype("datetime64[M]").astype(int) % 12 + 1,
         )
     )
-    z = np.array([0.0])
-    x = np.linspace(-180, 180, 20)
-    y = np.linspace(-90, 90, 20)
-    xx,yy = np.meshgrid(x, y)
-    shape = (len(dt), len(z), len(y), len(x))
-    
-    x = fast_spa(
+    return ut, delta_t
+
+# - python interface
+def pedt(datetime_like, apply_correction=False):
+    dt = np.asanyarray(datetime_like, dtype="datetime64[ns]").ravel()
+    ut = dt.astype(np.float64) // 1e9
+    year = dt.astype("datetime64[Y]").astype(int) + 1970
+    month = dt.astype("datetime64[M]").astype(int) % 12 + 1
+    return np.asfarray(polynomial_expression_for_delta_t(year, month, apply_correction))
+
+
+def radius_vector(datetime_like, apply_correction=False) :
+    ut, delta_t = prepare_datetime_like(datetime_like, apply_correction)
+    return np.asarray(_radius_vector(ut, delta_t))
+
+
+def fast_spa(
+    datetime_like,
+    elevation,
+    latitude,
+    longitude,
+    apply_correction=False,
+):
+    ut, delta_t = prepare_datetime_like(datetime_like, apply_correction)
+
+    shape = (len(ut), len(elevation), len(latitude), len(longitude))
+    x = _fast_spa(
         shape,
         ut,
         delta_t,
+        elevation,
+        latitude,
+        longitude,
+    )
+    return np.asarray(x)
+
+
+def main(datetime_like=None):
+    if datetime_like is None:
+        datetime_like = ["2022-01-01"]
+    z = np.array([0.0])
+    x = np.linspace(-180, 180, 20)
+    y = np.linspace(-90, 90, 20)
+    xx, yy = np.meshgrid(x, y)
+    fast_spa(
+        datetime_like,
         z,
-        
         yy,
         xx,
+        apply_correction=False,
     )
-    print(np.asarray(x))
 # ====================================================================================================
 
 cdef double[:,:] test_get_time_components(double[:] unixtime, double[:] delta_t):

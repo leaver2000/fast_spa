@@ -7,12 +7,10 @@
 # pyright: reportGeneralTypeIssues=false
 import cython
 from cython.parallel cimport prange
-import numpy as np
 cimport numpy as cnp
-cimport libc.math as math
 from libc.math cimport sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan, pi
-from numpy cimport ndarray as NDArray
-# from numpy cimport float64_t as double
+
+import numpy as np
 cnp.import_array()
 
 
@@ -125,13 +123,13 @@ cdef double[:] polynomial_expression_for_delta_t(
     The uncertainty in ΔT over this period can be estimated from scatter in the measurements.
     """
     cdef int n, i, year, month
-    cdef double u, dt, t
+    cdef double u, dt, t, y
     cdef double[:] delta_t
 
     n = len(years)
     delta_t = np.zeros(n, dtype=np.float64)
 
-    for i in range(n):
+    for i in prange(n, nogil=True):
         year = years[i]
         month = months[i]
         y = year + (month - 0.5) / 12
@@ -195,16 +193,15 @@ cdef double[:] polynomial_expression_for_delta_t(
             dt = -20 + 32 * u**2
 
         if apply_corection:
-            dt += -0.000012932 * (y - 1955)**2
-
-        delta_t[i] = dt 
+            delta_t[i] = dt -0.000012932 * (y - 1955)**2
+        else:
+            delta_t[i] = dt 
 
     return delta_t
 
 # =============================================================================
 # - nutation
 # =============================================================================
-# cdef double[:, :] L0, L1, L2, L3, L4, L5, B0, B1, B2, B3, B4, B5, R1, R2, R3, R4, R5
 # HELIOCENTRIC LONGITUDE TERMS
 cdef double[:, :] L0 = np.array(
     [
@@ -485,7 +482,8 @@ cdef double _heilo(
 @cython.boundscheck(False)
 @cython.wraparound(False)
 cdef tuple[double, double, double] heliocentric_longitude_latitude_and_radius_vector(
-    double JME) noexcept nogil: # type: ignore
+    double JME
+) noexcept nogil: # type: ignore
     cdef double L, B, R, l0, l1, l2, l3, l4, l5, b0, b1, r0, r1, r2, r3, r4
 
     l0 = _heilo(JME, L0)
@@ -678,6 +676,7 @@ cdef tuple[double, double] nutation_in_longitude_and_obliquity(
         Y2 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 2]
         Y3 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 3]
         Y4 = LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS[i, 4]
+
         A = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 0]
         B = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 1]
         C = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 2]
@@ -699,10 +698,12 @@ cdef tuple[double, double] nutation_in_longitude_and_obliquity(
         # mean orbit on the ecliptic, measured from the mean equinox of the date
         X4 = 125.04452 - 1_934.136261 * JCE + 0.0020708 * JCE**2 + JCE**3 / 45e4
 
-        # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
-        # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )
         rads = deg2rad(Y0 * X0 + Y1 * X1 + Y2 * X2 + Y3 * X3 + Y4 * X4)
+
+        # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
         delta_psi += ((A + B * JCE) * sin(rads) * 1.0 / 36e6) 
+
+        # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )
         delta_eps += ((C + D * JCE) * cos(rads) * 1.0 / 36e6)  
 
     return delta_psi, delta_eps
@@ -715,7 +716,7 @@ cdef tuple[double, double] nutation_in_longitude_and_obliquity(
 @cython.boundscheck(False)
 cdef double true_obliquity_of_the_ecliptic(
     double JME, double delta_eps
-) noexcept nogil:
+) noexcept nogil: # type: ignore
     cdef double U, E0
     U = JME / 10 # U = JME / 10
     #  ε0 = 84381448 − U − 155 U 2 + . 3 . 4680 93 . 1999 25 U −  4 5 6 7 5138 . U − 249 67 . U − 39 05 . U + 712 . U +  89 10
@@ -731,7 +732,7 @@ cdef double true_obliquity_of_the_ecliptic(
         + 5.79 * U**9 
         + 2.45 * U**10
     )
-    
+
     E = E0 * 1.0 / 3600 + delta_eps / 3600 # ε = ε0 / 3600 + ∆ε
 
     return E

@@ -1,12 +1,13 @@
 import os
 import glob
 from setuptools import Extension, setup
-from Cython.Build import cythonize
+
+
 import numpy as np
+from Cython.Build import cythonize
 
 os.environ["TEST"] = "TRUE"
 TEST = os.environ.get("TEST") == "TRUE"
-
 
 compiler_directives: dict[str, int | bool] = {"language_level": 3}
 define_macros: list[tuple[str, str | None]] = [("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION")]
