@@ -169,3 +169,4 @@ logs/
 scratchpad.ipynb
 _spa.c
 ddata.json
+fastspa/*.c
