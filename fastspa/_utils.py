@@ -389,9 +389,7 @@ def julian_day_dt(year, month, day, hour, minute, second, microsecond):
         month = month + 12
     a = int(year / 100)
     b = 2 - a + int(a * 0.25)
-    frac_of_day = (
-        (microsecond / 1e6 + (second + minute * 60 + hour * 3600)) * 1.0 / (3600 * 24)
-    )
+    frac_of_day = (microsecond / 1e6 + (second + minute * 60 + hour * 3600)) * 1.0 / (3600 * 24)
     d = day + frac_of_day
     jd = int(365.25 * (year + 4716)) + int(30.6001 * (month + 1)) + d + b - 1524.5
     return jd
@@ -447,9 +445,7 @@ def heliocentric_longitude(jme):
     l4 = sum_mult_cos_add_mult(L4, jme)
     l5 = sum_mult_cos_add_mult(L5, jme)
 
-    l_rad = (
-        l0 + l1 * jme + l2 * jme**2 + l3 * jme**3 + l4 * jme**4 + l5 * jme**5
-    ) / 10**8
+    l_rad = (l0 + l1 * jme + l2 * jme**2 + l3 * jme**3 + l4 * jme**4 + l5 * jme**5) / 10**8
     l = np.rad2deg(l_rad)
     return l % 360
 
@@ -592,9 +588,7 @@ def aberration_correction(earth_radius_vector):
     return deltau
 
 
-def apparent_sun_longitude(
-    geocentric_longitude, longitude_nutation, aberration_correction
-):
+def apparent_sun_longitude(geocentric_longitude, longitude_nutation, aberration_correction):
     lamd = geocentric_longitude + longitude_nutation + aberration_correction
     return lamd
 
@@ -609,31 +603,23 @@ def mean_sidereal_time(julian_day, julian_century):
     return v0 % 360.0
 
 
-def apparent_sidereal_time(
-    mean_sidereal_time, longitude_nutation, true_ecliptic_obliquity
-):
-    v = mean_sidereal_time + longitude_nutation * np.cos(
-        np.radians(true_ecliptic_obliquity)
-    )
+def apparent_sidereal_time(mean_sidereal_time, longitude_nutation, true_ecliptic_obliquity):
+    v = mean_sidereal_time + longitude_nutation * np.cos(np.radians(true_ecliptic_obliquity))
     return v
 
 
-def geocentric_sun_right_ascension(
-    apparent_sun_longitude, true_ecliptic_obliquity, geocentric_latitude
-):
+def geocentric_sun_right_ascension(apparent_sun_longitude, true_ecliptic_obliquity, geocentric_latitude):
     true_ecliptic_obliquity_rad = np.radians(true_ecliptic_obliquity)
     apparent_sun_longitude_rad = np.radians(apparent_sun_longitude)
 
-    num = np.sin(apparent_sun_longitude_rad) * np.cos(
-        true_ecliptic_obliquity_rad
-    ) - np.tan(np.radians(geocentric_latitude)) * np.sin(true_ecliptic_obliquity_rad)
+    num = np.sin(apparent_sun_longitude_rad) * np.cos(true_ecliptic_obliquity_rad) - np.tan(
+        np.radians(geocentric_latitude)
+    ) * np.sin(true_ecliptic_obliquity_rad)
     alpha = np.degrees(np.arctan2(num, np.cos(apparent_sun_longitude_rad)))
     return alpha % 360
 
 
-def geocentric_sun_declination(
-    apparent_sun_longitude, true_ecliptic_obliquity, geocentric_latitude
-):
+def geocentric_sun_declination(apparent_sun_longitude, true_ecliptic_obliquity, geocentric_latitude):
     geocentric_latitude_rad = np.radians(geocentric_latitude)
     true_ecliptic_obliquity_rad = np.radians(true_ecliptic_obliquity)
 
@@ -670,23 +656,20 @@ def xterm(u, observer_latitude, observer_elevation):
 
 
 def yterm(u, observer_latitude, observer_elevation):
-    y = 0.99664719 * np.sin(u) + observer_elevation / 6378140 * np.sin(
-        np.radians(observer_latitude)
-    )
+    y = 0.99664719 * np.sin(u) + observer_elevation / 6378140 * np.sin(np.radians(observer_latitude))
     return y
 
 
 def parallax_sun_right_ascension(
-    xterm, equatorial_horizontal_parallax, local_hour_angle, geocentric_sun_declination
+    xterm,
+    equatorial_horizontal_parallax,
+    local_hour_angle,
+    geocentric_sun_declination,
 ):
     equatorial_horizontal_parallax_rad = np.radians(equatorial_horizontal_parallax)
     local_hour_angle_rad = np.radians(local_hour_angle)
 
-    num = (
-        -xterm
-        * np.sin(equatorial_horizontal_parallax_rad)
-        * np.sin(local_hour_angle_rad)
-    )
+    num = -xterm * np.sin(equatorial_horizontal_parallax_rad) * np.sin(local_hour_angle_rad)
     denom = np.cos(np.radians(geocentric_sun_declination)) - xterm * np.sin(
         equatorial_horizontal_parallax_rad
     ) * np.cos(local_hour_angle_rad)
@@ -694,9 +677,7 @@ def parallax_sun_right_ascension(
     return delta_alpha
 
 
-def topocentric_sun_right_ascension(
-    geocentric_sun_right_ascension, parallax_sun_right_ascension
-):
+def topocentric_sun_right_ascension(geocentric_sun_right_ascension, parallax_sun_right_ascension):
     alpha_prime = geocentric_sun_right_ascension + parallax_sun_right_ascension
     return alpha_prime
 
@@ -712,13 +693,12 @@ def topocentric_sun_declination(
     geocentric_sun_declination_rad = np.radians(geocentric_sun_declination)
     equatorial_horizontal_parallax_rad = np.radians(equatorial_horizontal_parallax)
 
-    num = (
-        np.sin(geocentric_sun_declination_rad)
-        - yterm * np.sin(equatorial_horizontal_parallax_rad)
-    ) * np.cos(np.radians(parallax_sun_right_ascension))
-    denom = np.cos(geocentric_sun_declination_rad) - xterm * np.sin(
-        equatorial_horizontal_parallax_rad
-    ) * np.cos(np.radians(local_hour_angle))
+    num = (np.sin(geocentric_sun_declination_rad) - yterm * np.sin(equatorial_horizontal_parallax_rad)) * np.cos(
+        np.radians(parallax_sun_right_ascension)
+    )
+    denom = np.cos(geocentric_sun_declination_rad) - xterm * np.sin(equatorial_horizontal_parallax_rad) * np.cos(
+        np.radians(local_hour_angle)
+    )
     delta = np.degrees(np.arctan2(num, denom))
     return delta
 
@@ -729,7 +709,9 @@ def topocentric_local_hour_angle(local_hour_angle, parallax_sun_right_ascension)
 
 
 def topocentric_elevation_angle_without_atmosphere(
-    observer_latitude, topocentric_sun_declination, topocentric_local_hour_angle
+    observer_latitude,
+    topocentric_sun_declination,
+    topocentric_local_hour_angle,
 ):
     observer_latitude_rad = np.radians(observer_latitude)
     topocentric_sun_declination_rad = np.radians(topocentric_sun_declination)
@@ -745,12 +727,13 @@ def topocentric_elevation_angle_without_atmosphere(
 
 
 def atmospheric_refraction_correction(
-    local_pressure, local_temp, topocentric_elevation_angle_wo_atmosphere, atmos_refract
+    local_pressure,
+    local_temp,
+    topocentric_elevation_angle_wo_atmosphere,
+    atmos_refract,
 ):
     # switch sets delta_e when the sun is below the horizon
-    switch = topocentric_elevation_angle_wo_atmosphere >= -1.0 * (
-        0.26667 + atmos_refract
-    )
+    switch = topocentric_elevation_angle_wo_atmosphere >= -1.0 * (0.26667 + atmos_refract)
     delta_e = (
         (local_pressure / 1010.0)
         * (283.0 / (273 + local_temp))
@@ -769,12 +752,10 @@ def atmospheric_refraction_correction(
 
 
 def topocentric_elevation_angle(
-    topocentric_elevation_angle_without_atmosphere, atmospheric_refraction_correction
+    topocentric_elevation_angle_without_atmosphere,
+    atmospheric_refraction_correction,
 ):
-    e = (
-        topocentric_elevation_angle_without_atmosphere
-        + atmospheric_refraction_correction
-    )
+    e = topocentric_elevation_angle_without_atmosphere + atmospheric_refraction_correction
     return e
 
 
@@ -784,14 +765,16 @@ def topocentric_zenith_angle(topocentric_elevation_angle):
 
 
 def topocentric_astronomers_azimuth(
-    topocentric_local_hour_angle, topocentric_sun_declination, observer_latitude
+    topocentric_local_hour_angle,
+    topocentric_sun_declination,
+    observer_latitude,
 ):
     topocentric_local_hour_angle_rad = np.radians(topocentric_local_hour_angle)
     observer_latitude_rad = np.radians(observer_latitude)
     num = np.sin(topocentric_local_hour_angle_rad)
-    denom = np.cos(topocentric_local_hour_angle_rad) * np.sin(
-        observer_latitude_rad
-    ) - np.tan(np.radians(topocentric_sun_declination)) * np.cos(observer_latitude_rad)
+    denom = np.cos(topocentric_local_hour_angle_rad) * np.sin(observer_latitude_rad) - np.tan(
+        np.radians(topocentric_sun_declination)
+    ) * np.cos(observer_latitude_rad)
     gamma = np.degrees(np.arctan2(num, denom))
     return gamma % 360
 
@@ -906,13 +889,16 @@ def solar_position(
     # eot = equation_of_time(m, alpha, delta_psi, epsilon)
     H = local_hour_angle(v, lon, alpha)
     xi = equatorial_horizontal_parallax(R)
+    # 3.12
     u = uterm(lat)
     x = xterm(u, lat, elev)
     y = yterm(u, lat, elev)
     delta_alpha = parallax_sun_right_ascension(x, xi, H, delta)
     delta_prime = topocentric_sun_declination(delta, x, y, xi, delta_alpha, H)
     H_prime = topocentric_local_hour_angle(H, delta_alpha)
+    #
     e0 = topocentric_elevation_angle_without_atmosphere(lat, delta_prime, H_prime)
+
     delta_e = atmospheric_refraction_correction(pressure, temp, e0, atmos_refract)
     e = topocentric_elevation_angle(e0, delta_e)
     theta = topocentric_zenith_angle(e)
@@ -962,17 +948,12 @@ def transit_sunrise_sunset(dates, lat, lon, delta_t, numthreads):
     v = utday_res[0]
 
     ttday0_res = solar_position(ttday0, 0, 0, 0, 0, 0, delta_t, 0, numthreads, sst=True)
-    ttdayn1_res = solar_position(
-        ttdayn1, 0, 0, 0, 0, 0, delta_t, 0, numthreads, sst=True
-    )
-    ttdayp1_res = solar_position(
-        ttdayp1, 0, 0, 0, 0, 0, delta_t, 0, numthreads, sst=True
-    )
+    ttdayn1_res = solar_position(ttdayn1, 0, 0, 0, 0, 0, delta_t, 0, numthreads, sst=True)
+    ttdayp1_res = solar_position(ttdayp1, 0, 0, 0, 0, 0, delta_t, 0, numthreads, sst=True)
     m0 = (ttday0_res[1] - lon - v) / 360
-    cos_arg = (
-        np.sin(np.radians(-0.8333))
-        - np.sin(np.radians(lat)) * np.sin(np.radians(ttday0_res[2]))
-    ) / (np.cos(np.radians(lat)) * np.cos(np.radians(ttday0_res[2])))
+    cos_arg = (np.sin(np.radians(-0.8333)) - np.sin(np.radians(lat)) * np.sin(np.radians(ttday0_res[2]))) / (
+        np.cos(np.radians(lat)) * np.cos(np.radians(ttday0_res[2]))
+    )
     cos_arg[abs(cos_arg) > 1] = np.nan
     H0 = np.degrees(np.arccos(cos_arg)) % 180
 
@@ -1009,9 +990,7 @@ def transit_sunrise_sunset(dates, lat, lon, delta_t, numthreads):
     h = np.degrees(
         np.arcsin(
             np.sin(np.radians(lat)) * np.sin(np.radians(delta_prime))
-            + np.cos(np.radians(lat))
-            * np.cos(np.radians(delta_prime))
-            * np.cos(np.radians(Hp))
+            + np.cos(np.radians(lat)) * np.cos(np.radians(delta_prime)) * np.cos(np.radians(Hp))
         )
     )
 
@@ -1019,22 +998,12 @@ def transit_sunrise_sunset(dates, lat, lon, delta_t, numthreads):
     R = (
         m[1]
         + (h[1] + 0.8333)
-        / (
-            360
-            * np.cos(np.radians(delta_prime[1]))
-            * np.cos(np.radians(lat))
-            * np.sin(np.radians(Hp[1]))
-        )
+        / (360 * np.cos(np.radians(delta_prime[1])) * np.cos(np.radians(lat)) * np.sin(np.radians(Hp[1])))
     ) * 86400
     S = (
         m[2]
         + (h[2] + 0.8333)
-        / (
-            360
-            * np.cos(np.radians(delta_prime[2]))
-            * np.cos(np.radians(lat))
-            * np.sin(np.radians(Hp[2]))
-        )
+        / (360 * np.cos(np.radians(delta_prime[2])) * np.cos(np.radians(lat)) * np.sin(np.radians(Hp[2])))
     ) * 86400
 
     S[add_a_day] += 86400
@@ -1170,10 +1139,7 @@ def calculate_deltat(year, month):
 
     deltat = np.where(
         (1920 <= year) & (year < 1941),
-        21.20
-        + 0.84493 * (y - 1920)
-        - 0.076100 * (y - 1920) ** 2
-        + 0.0020936 * (y - 1920) ** 3,
+        21.20 + 0.84493 * (y - 1920) - 0.076100 * (y - 1920) ** 2 + 0.0020936 * (y - 1920) ** 3,
         deltat,
     )
 
@@ -1216,4 +1182,4 @@ def calculate_deltat(year, month):
 
     deltat = deltat.item() if np.isscalar(year) & np.isscalar(month) else deltat
 
-    return deltat
+    return deltat  # ΔT

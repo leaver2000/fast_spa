@@ -5,199 +5,18 @@
 # cython: cdivision=False
 
 # pyright: reportGeneralTypeIssues=false
+cimport cython
 import cython
 from cython.parallel cimport prange
 cimport numpy as cnp
-from libc.math cimport sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan, pi
+from libc.math cimport (
+    sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan, pi
+)
 
 import numpy as np
 cnp.import_array()
 
 
-# =============================================================================
-# - time
-# =============================================================================
-cdef double[:] polynomial_expression_for_delta_t(
-    long[:] years, long[:] months, bint apply_corection
-):
-    """
-    ref https://eclipse.gsfc.nasa.gov/SEcat5/deltatpoly.html
-
-    Using the ΔT values derived from the historical record and from direct 
-    observations (see: Table 1 and Table 2 ), a series of polynomial 
-    expressions have been created to simplify the evaluation of ΔT for any 
-    time during the interval -1999 to +3000.
-
-    We define the decimal year "y" as follows:
-        y = year + (month - 0.5)/12
-
-    This gives "y" for the middle of the month, which is accurate enough given 
-    the precision in the known values of ΔT. The following polynomial
-    expressions can be used calculate the value of ΔT (in seconds) over the
-    time period covered by of the Five Millennium Canon of Solar Eclipses:
-    -1999 to +3000.
-
-    Before the year -500, calculate:
-        ΔT = -20 + 32 * u^2
-        where:	u = (y-1820)/100
-
-    Between years -500 and +500, we use the data from Table 1, except that
-    for the year -500 we changed the value 17190 to 17203.7 in order to avoid a
-    discontinuity with the previous formula at that epoch. The value for ΔT is
-    given by a polynomial of the 6th degree, which reproduces the values in
-    Table 1 with an error not larger than 4 seconds:
-
-    ΔT = 10583.6 - 1014.41 * u + 33.78311 * u^2 - 5.952053 * u^3
-        - 0.1798452 * u^4 + 0.022174192 * u^5 + 0.0090316521 * u^6 
-
-    where: u = y/100
-
-    Between years +500 and +1600, we again use the data from Table 1 to derive a polynomial of the 6th degree.
-    ΔT = 1574.2 - 556.01 * u + 71.23472 * u^2 + 0.319781 * u^3
-        - 0.8503463 * u^4 - 0.005050998 * u^5 + 0.0083572073 * u^6
-
-    where: u = (y-1000)/100
-    Between years +1600 and +1700, calculate:
-
-        ΔT = 120 - 0.9808 * t - 0.01532 * t^2 + t^3 / 7129
-        where:  t = y - 1600
-    Between years +1700 and +1800, calculate:
-
-        ΔT = 8.83 + 0.1603 * t - 0.0059285 * t^2 + 0.00013336 * t^3 - t^4 / 1174000
-        where: t = y - 1700
-    Between years +1800 and +1860, calculate:
-
-        ΔT = 13.72 - 0.332447 * t + 0.0068612 * t^2 + 0.0041116 * t^3 - 0.00037436 * t^4 
-            + 0.0000121272 * t^5 - 0.0000001699 * t^6 + 0.000000000875 * t^7
-        where: t = y - 1800
-    Between years 1860 and 1900, calculate:
-
-        ΔT = 7.62 + 0.5737 * t - 0.251754 * t^2 + 0.01680668 * t^3
-            -0.0004473624 * t^4 + t^5 / 233174
-        where: t = y - 1860
-    Between years 1900 and 1920, calculate:
-
-        ΔT = -2.79 + 1.494119 * t - 0.0598939 * t^2 + 0.0061966 * t^3 - 0.000197 * t^4
-        where: t = y - 1900
-    Between years 1920 and 1941, calculate:
-
-        ΔT = 21.20 + 0.84493*t - 0.076100 * t^2 + 0.0020936 * t^3
-        where: t = y - 1920
-    Between years 1941 and 1961, calculate:
-
-        ΔT = 29.07 + 0.407*t - t^2/233 + t^3 / 2547
-        where: t = y - 1950
-    Between years 1961 and 1986, calculate:
-
-        ΔT = 45.45 + 1.067*t - t^2/260 - t^3 / 718
-        where: t = y - 1975
-    Between years 1986 and 2005, calculate:
-
-        ΔT = 63.86 + 0.3345 * t - 0.060374 * t^2 + 0.0017275 * t^3 + 0.000651814 * t^4 
-            + 0.00002373599 * t^5
-        where: t = y - 2000
-    Between years 2005 and 2050, calculate:
-
-        ΔT = 62.92 + 0.32217 * t + 0.005589 * t^2
-        where: t = y - 2000
-    This expression is derived from estimated values of ΔT in the years 2010 and 2050. The value for 2010 (66.9 seconds) is based on a linearly extrapolation from 2005 using 0.39 seconds/year (average from 1995 to 2005). The value for 2050 (93 seconds) is linearly extrapolated from 2010 using 0.66 seconds/year (average rate from 1901 to 2000).
-
-    Between years 2050 and 2150, calculate:
-
-        ΔT = -20 + 32 * ((y-1820)/100)^2 - 0.5628 * (2150 - y)
-    The last term is introduced to eliminate the discontinuity at 2050.
-
-    After 2150, calculate:
-        ΔT = -20 + 32 * u^2
-        where:	u = (y-1820)/100
-
-    All values of ΔT based on Morrison and Stephenson [2004] assume a value for
-    the Moon's secular acceleration of -26 arcsec/cy^2. However, the ELP-2000/82
-    lunar ephemeris employed in the Canon uses a slightly different value of
-    -25.858 arcsec/cy^2. Thus, a small correction "c" must be added to the
-    values derived from the polynomial expressions for ΔT before they can be
-    used in the Canon
-        c = -0.000012932 * (y - 1955)^2
-    Since the values of ΔT for the interval 1955 to 2005 were derived independent of any lunar ephemeris, no correction is needed for this period.
-
-    The uncertainty in ΔT over this period can be estimated from scatter in the measurements.
-    """
-    cdef int n, i, year, month
-    cdef double u, dt, t, y
-    cdef double[:] delta_t
-
-    n = len(years)
-    delta_t = np.zeros(n, dtype=np.float64)
-
-    for i in prange(n, nogil=True):
-        year = years[i]
-        month = months[i]
-        y = year + (month - 0.5) / 12
-        if year < -500:
-            u = (y - 1820) / 100
-            dt = -20 + 32 * u**2
-        elif year < 500:
-            u = y / 100
-            dt = (
-                10583.6 - 1014.41 * u 
-                + 33.78311 * u**2 
-                - 5.952053 * u**3 
-                - 0.1798452 * u**4 
-                + 0.022174192 * u**5 
-                + 0.0090316521 * u**6
-            )
-        elif year < 1600:
-            u = (y - 1000) / 100
-            dt = (
-                1574.2 - 556.01 * u 
-                + 71.23472 * u**2 
-                + 0.319781 * u**3 
-                - 0.8503463 * u**4 
-                - 0.005050998 * u**5 
-                + 0.0083572073 * u**6
-            )
-        elif year < 1700:
-            t = y - 1600
-            dt = 120 - 0.9808 * t - 0.01532 * t**2 + t**3 / 7129
-        elif year < 1800:
-            t = y - 1700
-            dt = 8.83 + 0.1603 * t - 0.0059285 * t**2 + 0.00013336 * t**3 - t**4 / 1174000
-        elif year < 1860:
-            t = y - 1800
-            dt = 13.72 - 0.332447 * t + 0.0068612 * t**2 + 0.0041116 * t**3 - 0.00037436 * t**4 + 0.0000121272 * t**5 - 0.0000001699 * t**6 + 0.000000000875 * t**7
-        elif year < 1900:
-            t = y - 1860
-            dt = 7.62 + 0.5737 * t - 0.251754 * t**2 + 0.01680668 * t**3 - 0.0004473624 * t**4 + t**5 / 233174
-        elif year < 1920:
-            t = y - 1900
-            dt = -2.79 + 1.494119 * t - 0.0598939 * t**2 + 0.0061966 * t**3 - 0.000197 * t**4
-        elif year < 1941:
-            t = y - 1920
-            dt = 21.20 + 0.84493 * t - 0.076100 * t**2 + 0.0020936 * t**3
-        elif year < 1961:
-            t = y - 1950
-            dt = 29.07 + 0.407 * t - t**2 / 233 + t**3 / 2547
-        elif year < 1986:
-            t = y - 1975
-            dt = 45.45 + 1.067 * t - t**2 / 260 - t**3 / 718
-        elif year < 2005:
-            t = y - 2000
-            dt = 63.86 + 0.3345 * t - 0.060374 * t**2 + 0.0017275 * t**3 + 0.000651814 * t**4 + 0.00002373599 * t**5
-        elif year < 2050:
-            t = y - 2000
-            dt = 62.92 + 0.32217 * t + 0.005589 * t**2
-        elif year < 2150:
-            dt = -20 + 32 * ((y - 1820) / 100)**2 - 0.5628 * (2150 - y)
-        else:
-            u = (y - 1820) / 100
-            dt = -20 + 32 * u**2
-
-        if apply_corection:
-            delta_t[i] = dt -0.000012932 * (y - 1955)**2
-        else:
-            delta_t[i] = dt 
-
-    return delta_t
 
 # =============================================================================
 # - nutation
@@ -365,11 +184,11 @@ cdef double[:, :] L5 = np.array(
 # HELIOCENTRIC LATITUDE TERMS
 cdef double[:, :] B0 = np.array(
     [
-        [280.0,     3.199,  84334.662],
-        [102.0,     5.422,  5507.553],
-        [80.0,      3.88,   5223.69],
-        [44.0,      3.7,    2352.87],
-        [32.0,      4.0,    1577.34]
+        [280.0, 3.199, 84334.662],
+        [102.0, 5.422, 5507.553],
+        [80.0, 3.88, 5223.69],
+        [44.0, 3.7, 2352.87],
+        [32.0, 4.0, 1577.34]
     ], 
     dtype=np.float64
 )
@@ -382,7 +201,7 @@ cdef double[:, :] B1 = np.array(
 )
 
 
-# HELIOCENTRIC RADIUS TERMS
+# heliocentric radius terms
 cdef double[:, :] R0 = np.array(
     [
         [100013989.0, 0.0, 0.0],
@@ -453,35 +272,28 @@ cdef double[:, :] R2 = np.array(
         [3.0, 5.47, 18849.23],
     ], dtype=np.float64
 )
-cdef double[:, :] R3 = np.array([[145.0, 4.273, 6283.076], [7.0, 3.92, 12566.15]], dtype=np.float64)
-cdef double[:, :]  R4 = np.array([[4.0, 2.56, 6283.08]], dtype=np.float64)
+cdef double[:, :] R3 = np.array(
+    [
+        [145.0, 4.273, 6283.076],
+        [7.0, 3.92, 12566.15]
+    ], 
+    dtype=np.float64
+)
+cdef double[:, :] R4 = np.array(
+    [
+        [4.0, 2.56, 6283.08]
+    ],
+    dtype=np.float64
+)
 
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef double _heilo(
-    double JME, double[:, :] terms) noexcept nogil: # type: ignore
-    # 3.2.1. For each row of Table A4.2, calculate the term L0i(in radians)
-    cdef int i, n
-    cdef double A, B, C, x
-
-    n = len(terms)
-    x = 0.0
-
-    for i in prange(n, nogil=True):
-        A = terms[i, 0]
-        B = terms[i, 1]
-        C = terms[i, 2]
-        x += A * cos(B + C * JME) 
-
-    return x
 
 # =============================================================================
 # 3.2. Calculate the Earth heliocentric longitude, latitude, and radius vector
-# (L, B, R): 
+# (L, B, R):
 # =============================================================================
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef tuple[double, double, double] heliocentric_longitude_latitude_and_radius_vector(
+cdef tuple[double, double, double] longitude_latitude_and_radius_vector(
     double JME
 ) noexcept nogil: # type: ignore
     cdef double L, B, R, l0, l1, l2, l3, l4, l5, b0, b1, r0, r1, r2, r3, r4
@@ -513,9 +325,29 @@ cdef tuple[double, double, double] heliocentric_longitude_latitude_and_radius_ve
     r2 = _heilo(JME, R2)
     r3 = _heilo(JME, R3)
     r4 = _heilo(JME, R4)
-    R = (r0 + r1 * JME + r2 * JME**2 + r3 * JME**3 + r4 * JME**4)  / 1e8
+    R = (r0 + r1 * JME + r2 * JME**2 + r3 * JME**3 + r4 * JME**4)/10**8
+    # R = (r0 + r1 * JME + r2 * JME**2 + r3 * JME**3 + r4 * JME**4)  / 1e8
 
     return (L, B, R)
+
+# 3.2.1. For each row of Table A4.2, calculate the term L0i(in radians)
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef double _heilo(
+    double JME, double[:, :] terms) noexcept nogil: # type: ignore
+    cdef int i, n
+    cdef double A, B, C, x
+
+    n = len(terms)
+    x = 0.0
+
+    for i in prange(n, nogil=True):
+        A = terms[i, 0]
+        B = terms[i, 1]
+        C = terms[i, 2]
+        x += A * cos(B + C * JME) 
+
+    return x
 
 
 # =============================================================================
@@ -733,37 +565,108 @@ cdef double true_obliquity_of_the_ecliptic(
         + 2.45 * U**10
     )
 
-    E = E0 * 1.0 / 3600 + delta_eps / 3600 # ε = ε0 / 3600 + ∆ε
+    E = E0 * 1.0 / 3600 + delta_eps / 3600                                      # ε = ε0 / 3600 + ∆ε
 
     return E
 
 
-# =====================================================================================================================
+# =============================================================================
 # 3.9	 Calculate the geocentric sun right ascension, " (in degrees):
 # 3.10.	 Calculate the geocentric sun declination, * (in degrees): 
-# =====================================================================================================================
+# =============================================================================
+
+
+
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef tuple[double, double] right_ascension_and_declination(
+@cython.cdivision(False)
+cdef tuple[double, double] geocentric_right_ascension_and_declination(
     double apparent_lon, double geocentric_lat, double true_ecliptic_obliquity
 ) noexcept nogil: # type: ignore
     cdef double A, B, E, alpha, delta
 
     # - in radians
-    A = deg2rad(apparent_lon)               # λ
-    B = deg2rad(geocentric_lat)             # β
-    E = deg2rad(true_ecliptic_obliquity)    # ε
+    A = deg2rad(apparent_lon)                                                   # λ
+    B = deg2rad(geocentric_lat)                                                 # β
+    E = deg2rad(true_ecliptic_obliquity)                                        # ε
 
     alpha = (
         atan2(sin(A) * cos(E) - tan(B) * sin(E), cos(A))
     ) # ArcTan2(sin λ *cos ε  − tan β  * sin ε / cos λ)
     
+    # delta = (
+    #     asin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
+    # ) # Arcsin(sin β *cos ε  + cos β  * sin ε  * sin λ)
     delta = (
-        asin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
+        arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
     ) # Arcsin(sin β *cos ε  + cos β  * sin ε  * sin λ)
-
     # - in degrees
-    alpha = rad2deg(alpha) % 360.0          # α
-    delta = rad2deg(delta)                  # δ
+    alpha = degrees(alpha) % 360.0  
+    delta = degrees(delta)                                                      # δ
 
     return alpha, delta
+
+# cdef double  geocentric_sun_declination(
+#     double A, 
+#     double E,
+#     double B,
+# ) noexcept nogil: # type: ignore
+#     cdef double delta 
+#     # geocentric_latitude_rad = radians(geocentric_latitude)
+#     # true_ecliptic_obliquity_rad = radians(true_ecliptic_obliquity)
+
+#     delta = (
+#         arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
+#     )
+#     return delta
+# =============================================================================
+# 3.12 Calculate the topocentric sun right ascension and declination, α' and δ'
+# 3.13. Calculate the topocentric local hour angle, H’ (in degrees)
+# =============================================================================
+@cython.boundscheck(False)
+@cython.wraparound(False)
+cdef tuple[double,double] topocentric_declination_hour_angle(
+    double delta,   # δ geocentric sun declination
+    double H,       # H local hour angle
+    double E,       # E observer elevation
+    double lat,     # observer latitude
+    double xi,      # ξ equatorial horizontal parallax
+) noexcept nogil: # type: ignore
+    cdef double u, x, y, Phi, delta_alpha, delta_prime, H_prime
+    
+    delta = radians(delta)          # δ
+    xi = radians(xi)                # ξ
+    Phi = radians(lat)              # ϕ
+
+    # - 3.12.2. Calculate the term u (in radians)
+    u = (
+        arctan(0.99664719 * tan(Phi))
+    ) # u = Acrtan(0.99664719 * tan ϕ)
+
+    # - 3.12.3. Calculate the term x,
+    x = (
+        cos(u) + E / 6378140 * cos(Phi)
+    ) # x = cosu + E / 6378140 * cos ϕ
+
+    # - 3.12.4. Calculate the term y
+    y = (
+        0.99664719 * sin(u) + E / 6378140 * sin(Phi)
+    ) # y = 0.99664719 * sin u + E / 6378140 * sin ϕ
+
+    # - 3.12.5. Calculate the parallax in the sun right ascension (in degrees),
+    delta_alpha = atan2(
+        -x * sin(xi) * sin(H),
+        cos(delta) - x * sin(xi) * cos(H)
+    ) # ∆α = Arctan 2(-x *sin ξ *sin H / cosδ − x * sin ξ * cos H)
+
+    delta_prime = asin(
+        sin(delta) - y * sin(xi) * cos(delta_alpha)
+    )
+
+    # 3.13. Calculate the topocentric local hour angle, H’ (in degrees)
+    H_prime = H - delta_alpha # H' = H − ∆α
+
+    return degrees(delta_prime), H_prime
+
+

@@ -20,5 +20,6 @@ lint = ["black", "flake8"]
 [tool.setuptools.package-data]
 fastspa = ["*.pxd"]
 
-# [tool.setuptools.packages.find]
-# where = ["src"]
+[tool.black]
+line-length = 79
+target-version = ["py310"]
