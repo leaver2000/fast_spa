@@ -29,8 +29,7 @@ cdef cnp.ndarray cast_array(cnp.ndarray a, int n) noexcept:
     return cnp.PyArray_Cast(a, n) # type: ignore
 
 
-@cython.boundscheck(True)
-cdef cnp.ndarray dtarray(datetime_like) noexcept:
+cdef cnp.ndarray _dtarray(datetime_like) noexcept:
     """
     main entry point for datetime_like.
     need to add validation to the object so everthing else can be marked as
@@ -38,7 +37,7 @@ cdef cnp.ndarray dtarray(datetime_like) noexcept:
     
     """
     cdef cnp.ndarray dt
-    dt = np.asanyarray(datetime_like, dtype="datetime64[ns]").ravel() # type: ignore
+    dt = np.asanyarray(datetime_like, dtype="datetime64[ns]") # type: ignore
 
     return dt
 
@@ -65,13 +64,103 @@ cdef unixtime_delta_t(
     cdef long[:] y, m
     cdef double[:] ut, delta_t
 
-    dt = dtarray(datetime_like)
+    dt = _dtarray(datetime_like)
     ut = _unixtime(dt)
     y = _years(dt)
     m = _months(dt)
     delta_t = _pe4dt(y, m, apply_correction)
 
     return ut, delta_t
+
+
+def fa_property(f):
+    return property(lambda self: np.asfarray(f(self)))
+
+cdef class Julian:
+    cdef double[:] _unixtime
+    cdef double[:] _delta_t
+
+
+    def __init__(self, datetime_like, apply_correction: Boolean = False):
+        self._unixtime, self._delta_t = unixtime_delta_t(
+            datetime_like, apply_correction
+        )
+
+    cdef double[:]_map(self, f, double[:] x):
+        cdef int n, i
+        cdef double[:] out
+        n = len(x)
+        out = np.zeros((n,), dtype=np.float64) # type: ignore
+
+        for i in range(n):
+            out[i] = f(x[i])
+
+        return out
+    
+    cdef _day(self):
+        return self._map(lib.julian_day, self._unixtime)
+
+
+    cdef _century(self):
+        return self._map(lib.julian_century, self._day())
+
+    cdef _ephemeris_day(self):
+        cdef int n, i
+        cdef double[:] out
+        n = len(self.day)
+        out = np.zeros((n,), dtype=np.float64) # type: ignore
+        jd = self._day()
+        dt = self._delta_t
+
+        for i in range(n):
+            out[i] = lib.julian_ephemeris_day(jd[i], dt[i])
+        
+        return out
+    
+    cdef _ephemeris_century(self):
+        return self._map(lib.julian_ephemeris_century, self._ephemeris_day())
+    
+    cdef _ephemeris_millennium(self):
+        return self._map(lib.julian_ephemeris_millennium, self._ephemeris_century())
+
+    @fa_property
+    def unixtime(self):
+        return self._unixtime
+    
+    @fa_property
+    def delta_t(self):
+        return self._delta_t
+
+    @fa_property
+    def day(self):
+        return self._day()
+    
+    @property
+    def century(self):
+        return np.asfarray(self._century())
+    
+    @property
+    def ephemeris_day(self):
+        return np.asfarray(self._ephemeris_day())
+
+    @property
+    def ephemeris_century(self):
+        return np.asfarray(self._ephemeris_century())
+
+    @property
+    def ephemeris_millennium(self):
+        return np.asfarray(self._ephemeris_millennium())
+    
+    def __repr__(self):
+        return f"""Julian(
+    unixtime={self.unixtime},
+    delta_t={self.delta_t},
+    day={self.day},
+    century={self.century},
+    ephemeris_day={self.ephemeris_day},
+    ephemeris_century={self.ephemeris_century},
+    ephemeris_millennium={self.ephemeris_millennium},
+)"""
 
 
 cdef double[:] _julian_ephemeris_millennium(
@@ -87,9 +176,12 @@ cdef double[:] _julian_ephemeris_millennium(
         ut  = unixtime[i]
         dt = delta_t[i]
         out[i] = lib.julian_ephemeris_millennium(
-            lib.julian_ephemeris_century(lib.julian_ephemeris_day(
-                lib.julian_day(ut), dt))
-        )
+            lib.julian_ephemeris_century(
+                lib.julian_ephemeris_day(
+                    lib.julian_day(ut), dt
+                    )
+                )
+            )
     return out
 
 
@@ -125,7 +217,7 @@ def pe4dt(datetime_like, apply_correction:Boolean=False):
     cdef cnp.ndarray dt
     cdef long[:] y, m
 
-    dt = dtarray(datetime_like)
+    dt = _dtarray(datetime_like)
     y = _years(dt)
     m = _months(dt)
 

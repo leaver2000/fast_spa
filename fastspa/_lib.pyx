@@ -595,12 +595,9 @@ cdef tuple[double, double] geocentric_right_ascension_and_declination(
         atan2(sin(A) * cos(E) - tan(B) * sin(E), cos(A))
     ) # ArcTan2(sin λ *cos ε  − tan β  * sin ε / cos λ)
     
-    # delta = (
-    #     asin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
-    # ) # Arcsin(sin β *cos ε  + cos β  * sin ε  * sin λ)
     delta = (
         arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
-    ) # Arcsin(sin β *cos ε  + cos β  * sin ε  * sin λ)
+    ) # Arcsin(sin β * cos ε  + cos β  * sin ε  * sin λ)
     # - in degrees
     alpha = degrees(alpha) % 360.0  
     delta = degrees(delta)                                                      # δ

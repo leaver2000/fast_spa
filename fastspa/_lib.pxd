@@ -13,10 +13,8 @@ from libc.math cimport (
 cimport numpy as cnp
 import numpy as np
 
-# ctypedef double double
 ctypedef unsigned long long u64
 
-# np.pi
 # =============================================================================
 cdef inline double deg2rad(double deg) noexcept nogil: # type: ignore
     return deg * (pi / 180)
@@ -31,9 +29,7 @@ cdef inline double rad2deg(double rad) noexcept nogil: # type: ignore
 @cython.cdivision(True)
 cdef inline double degrees(double rad) noexcept nogil: # type: ignore
     return (rad * 180) / pi
-# cdef quasion12(double L):
-#     # L (in Degrees) = L(in radians) * 180 / π
-#     return L * 180 / pi
+
 cdef inline double arctan(double x) noexcept nogil: # type: ignore
     return atan2(x, 1)
 
@@ -42,33 +38,8 @@ cdef inline double arcsin(double x) noexcept nogil: # type: ignore
 # =============================================================================
 # - time
 # =============================================================================
-# cdef int UNIX_EPOCH_0 = 1970  # Unix epoch start year
-# cdef double DAYS_PER_YEAR = 365.25 # days per year
-# cdef double SECONDS_PER_YEAR = 31536000 # seconds per year
-# cdef double SECONDS_PER_MONTH = 2629743.83 # seconds per month
 
 
-# cdef inline double m360(double x) noexcept nogil: # type: ignore
-#     return x % 360
-
-# cdef inline double julian_day(double ut) noexcept nogil: # type: ignore
-#     return ut / 86400 + 2440587.5
-
-# cdef inline double julian_century(double jd) noexcept nogil: # type: ignore
-#     return (jd - 2451545) / 36525
-
-# cdef inline double julian_ephemeris_day(double jd, double delta_t) noexcept nogil: # type: ignore
-#     return jd + delta_t / 86400
-
-# cdef inline double julian_ephemeris_century(double jde) noexcept nogil: # type: ignore
-#     return (jde - 2451545) / 36525
-
-# cdef inline double julian_ephemeris_millennium(double jce) noexcept nogil: # type: ignore
-#     return jce / 10
-    # return jde
-    # return jc
-    # return jce
-    # return jme
 @cython.cdivision(True)
 cdef inline double  julian_day(double unixtime)noexcept nogil: # type: ignore
     return unixtime * 1.0 / 86400 + 2440587.5
