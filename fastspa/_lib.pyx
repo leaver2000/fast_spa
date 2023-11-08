@@ -604,19 +604,7 @@ cdef tuple[double, double] geocentric_right_ascension_and_declination(
 
     return alpha, delta
 
-# cdef double  geocentric_sun_declination(
-#     double A, 
-#     double E,
-#     double B,
-# ) noexcept nogil: # type: ignore
-#     cdef double delta 
-#     # geocentric_latitude_rad = radians(geocentric_latitude)
-#     # true_ecliptic_obliquity_rad = radians(true_ecliptic_obliquity)
 
-#     delta = (
-#         arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
-#     )
-#     return delta
 # =============================================================================
 # 3.12 Calculate the topocentric sun right ascension and declination, α' and δ'
 # 3.13. Calculate the topocentric local hour angle, H’ (in degrees)

@@ -16,6 +16,7 @@ date_objs = [
     ["2019-01-01 00:00:00", "2020-01-01 00:00:00", "2019-01-01 00:00:00"],
 ]
 
+
 @pytest.mark.parametrize("obj", date_objs)
 def test_julian(obj):
     j = Julian(obj)
@@ -29,14 +30,15 @@ def test_julian(obj):
     assert np.all(j.ephemeris_century == spa.julian_ephemeris_century(j.ephemeris_day))
     assert np.all(j.ephemeris_millennium == spa.julian_ephemeris_millennium(j.ephemeris_century))
 
+
 @pytest.mark.parametrize("obj", date_objs)
 def test_pedt(obj: list[Any]) -> None:
-    delta_t = fastspa.pe4dt(obj) # polinomial expression for delta_t
+    delta_t = fastspa.pe4dt(obj)  # polynomial expression for delta_t
     assert isinstance(delta_t, np.ndarray)
     assert delta_t.dtype == np.float64
     assert delta_t.ndim == 1
 
-    # ... slow spa
+    # slow spa...
     dt = np.asarray(obj, dtype="datetime64[ns]")
     year = dt.astype("datetime64[Y]").astype(int) + 1970
     month = dt.astype("datetime64[M]").astype(int) % 12 + 1
@@ -52,18 +54,15 @@ def test_julian_ephemeris_millennium(obj) -> None:
     assert jme.ndim == 1
 
     delta_t = fastspa.pe4dt(obj)
-    unixtime = (
-        np.asanyarray(obj, dtype="datetime64[ns]").astype(np.int64) // 1e9
+    unix_time = np.asanyarray(obj, dtype="datetime64[ns]").astype(np.int64) // 1e9
+
+    assert np.all(
+        jme
+        # slow spa...
+        == spa.julian_ephemeris_millennium(
+            spa.julian_ephemeris_century(spa.julian_ephemeris_day(spa.julian_day(unix_time), delta_t))
+        )
     )
-    jd = utils.julian_day(unixtime)
-    assert np.all(jd == spa.julian_day(unixtime))
-
-    jde = utils.julian_ephemeris_day(jd, delta_t)
-    assert np.all(jde == spa.julian_ephemeris_day(jd, delta_t))
-
-    jce = utils.julian_ephemeris_century(jde)
-
-    # assert np.all(jme == spa.julian_ephemeris_millennium(jce))
     assert jme.dtype == np.float64
     assert jme.ndim == 1
 
@@ -74,10 +73,8 @@ def test_radius_vector(obj: list[Any]) -> None:
 
     assert np.allclose(
         R,
-        # ... slow spa
-        spa.heliocentric_radius_vector(
-            fastspa.julian_ephemeris_millennium(obj)
-        ),
+        # slow spa...
+        spa.heliocentric_radius_vector(fastspa.julian_ephemeris_millennium(obj)),
     )
 
 
@@ -91,7 +88,19 @@ def test_fastspa(obj: list[Any]) -> None:
     print(x.shape)
 
 
-def spa_loop(times, lat, lon, elevation, pressure, delta_t):
+def slow_spa(
+    obj,
+    lat,
+    lon,
+    elevation,
+    pressure,
+    temp,
+    refraction,
+):
+    delta_t = fastspa.pe4dt(obj)
+    dt = np.asanyarray(obj, dtype="datetime64[ns]")
+    unix_time = dt.astype(np.float64) // 1e9
+
     x = np.stack(
         [
             np.stack(
@@ -101,70 +110,35 @@ def spa_loop(times, lat, lon, elevation, pressure, delta_t):
                     lon=lon,
                     elev=elevation,
                     pressure=pressure,
-                    temp=0,
+                    temp=temp,
                     delta_t=delta_t[i : i + 1],
-                    atmos_refract=0,
+                    atmos_refract=refraction,
                     numthreads=None,
                     sst=False,
                     esd=False,
                 )[:-1]
             )
-            for i, ut in enumerate(times)
+            for i, ut in enumerate(unix_time)
         ],
         axis=1,
     )
     return x
 
 
-# @pytest.mark.parametrize("obj", date_objs)
-def test_f():
-    obj = ["2022"]
-    pressure = 1013.25
+@pytest.mark.parametrize("obj", date_objs)
+def test_f(obj):
+    pressure = np.array([1013.25])
+    refraction = np.array([0.5667])
+    temp = np.array([12])
     elevation = np.array([0])
     lon = np.array([0])
     lat = np.array([0])
+    # slow spa...
+    x = slow_spa(obj, lat, lon, elevation, pressure, temp, refraction)
 
-    dt = np.asanyarray(obj, dtype="datetime64[ns]")
-    year = dt.astype("datetime64[Y]").astype(int) + 1970
-    month = dt.astype("datetime64[M]").astype(int) % 12 + 1
-    ut = dt.astype(np.float64) // 1e9
-    delta_t = spa.calculate_deltat(year, month)
-    x = spa_loop(ut, lat, lon, elevation, pressure, delta_t)
-    # theta_, theta0_, e_, e0_, phi_ = x
-    y = fastspa.fast_spa(obj, lat, lon, elevation)  # .ravel()
-    # theta, theta0, e, e0, phi = y
+    y = fastspa.fast_spa(obj, lat, lon, elevation, pressure, temp, refraction)
 
-    # assert y.ndim == 4
-    # assert y.shape == (5, len(dt), len(lat), len(lon))
-    print(
-        f"""--------------
-{np.allclose(x, y)}
-spa
-{y.ravel()}
-fastspa
-{x.ravel()}
-"""
-    )
-    # fastspa.fast_spa(obj, )
-    # jme = julian_ephemeris_millennium(ut, delta_t)
-
-    # # 3.5. Calculate the true obliquity of the ecliptic
-    # test_earth_heliocentric_longitude_latitude_and_radius_vector(jme)
-    # L, B, R = _calculate_the_earth_heliocentric_longitude_latitude_and_radius_vector(jme)
-
-    # # 3.4. Calculate the nutation in longitude and obliquity
-    # # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
-    # # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )
-    # test_calculate_the_nutation_in_longitude_and_obliquity(jme)
-    # delta_psi, delta_epsilon = _calculate_the_nutation_in_longitude_and_obliquity(jme)
-
-    # # 3.5. Calculate the true obliquity of the ecliptic
-    # e = _true_obliquity_of_the_ecliptic(jme, delta_epsilon)
-
-    # # 3.6-3.7.	 Calculate the apparent sun longitude, 8 (in degrees):
-    # test_calculate_the_right_ascension_and_declination(L, B, R, e, delta_psi)
-    # alpha, delta = _calculate_the_right_ascension_and_declination(L, B, R, e, delta_psi)
-    # # print(alpha, delta)
-
-
-# spa.solar_position_loop()
+    # there appears to be some differences with the division
+    # in the c api. specifically regarding the delta
+    # δ  = arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
+    assert np.allclose(x.ravel(), y.ravel(), atol=1e-2)
