@@ -20,6 +20,21 @@ if TEST:
     define_macros.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
 include_dirs = [".", np.get_include()]
+
+
+def find_extensions(src: str):
+    return [
+        Extension(
+            os.path.splitext(os.path.basename(path))[0],
+            [path],
+            include_dirs=include_dirs,
+            define_macros=define_macros,
+        )
+        for path in glob.glob(os.path.join(src, "*.pyx"))
+    ]
+
+
+extension_modules = find_extensions("fastspa")
 extension_modules = [
     Extension(
         "fastspa._core",
@@ -33,6 +48,12 @@ extension_modules = [
         include_dirs=include_dirs,
         define_macros=define_macros,
     ),
+    # Extension(
+    #     "fastspa._view",
+    #     ["fastspa/_view.pxd"],
+    #     include_dirs=include_dirs,
+    #     define_macros=define_macros,
+    # ),
 ]
 
 setup(

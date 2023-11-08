@@ -14,9 +14,6 @@ dependencies = ["numpy>=1.22"]
 test = ["Cython >= 0.29.23", "pytest >= 7.2.0", "coverage >= 6.5.0"]
 lint = ["black", "flake8"]
 
-# add the package data for the pxd files
-# [options.package_data]
-# fastspa = ["*.pxd"]
 [tool.setuptools.package-data]
 fastspa = ["*.pxd"]
 

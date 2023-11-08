@@ -514,29 +514,39 @@ cdef tuple[double, double] nutation_in_longitude_and_obliquity(
         C = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 2]
         D = LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS[i, 3]
 
-        # 3.4.1. Calculate the mean elongation of the moon from the sun, X0 (in degrees
-        X0 = 297.85036 + 445_267.111480 * JCE - 0.0019142 * JCE**2 + JCE**3 / 189_474
+        # - in degrees
+        # 3.4.1. Calculate the mean elongation of the moon from the sun
+        X0 = 297.85036 + 445_267.111480 * JCE - 0.0019142 * JCE**2 + JCE**3 / 189474
 
-        # 3.4.2. Calculate the mean anomaly of the sun (Earth), X1 (in degrees)
+        # 3.4.2. Calculate the mean anomaly of the sun (Earth)
         X1 = 357.52772 + 35999.050340 * JCE - 0.0001603 * JCE**2 - JCE**3 / 3e5
 
-        # 3.4.3. Calculate the mean anomaly of the moon, X2 (in degrees)
-        X2 = 134.96298 + 477_198.867398 * JCE + 0.0086972 * JCE**2 + JCE**3 / 56_250
+        # 3.4.3. Calculate the mean anomaly of the moon
+        X2 = 134.96298 + 477_198.867398 * JCE + 0.0086972 * JCE**2 + JCE**3 / 56250
 
-        # 3.4.4. Calculate the moon’s argument of latitude, X3 (in degrees)
-        X3 = 93.27191 + 483_202.017538 * JCE - 0.0036825 * JCE**2 + JCE**3 / 327_270
+        # 3.4.4. Calculate the moon’s argument of latitude
+        X3 = (
+            93.27191 + 483_202.017538 * JCE - 0.0036825 * JCE**2 + JCE**3 / 327270
+        )
 
         # 3.4.5. Calculate the longitude of the ascending node of the moon’s 
         # mean orbit on the ecliptic, measured from the mean equinox of the date
-        X4 = 125.04452 - 1_934.136261 * JCE + 0.0020708 * JCE**2 + JCE**3 / 45e4
+        X4 = (
+            125.04452 - 1934.136261 * JCE + 0.0020708 * JCE**2 + JCE**3 / 45e4
+        )
+    
+        # - in radians
+        rads = radians(Y0 * X0 + Y1 * X1 + Y2 * X2 + Y3 * X3 + Y4 * X4)
 
-        rads = deg2rad(Y0 * X0 + Y1 * X1 + Y2 * X2 + Y3 * X3 + Y4 * X4)
+        # 3.4.7. Calculate the nutation in longitude
+        delta_psi += (
+            (A + B * JCE) * sin(rads) * 1.0 / 36e6
+        ) # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j ) 
 
-        # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
-        delta_psi += ((A + B * JCE) * sin(rads) * 1.0 / 36e6) 
-
-        # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )
-        delta_eps += ((C + D * JCE) * cos(rads) * 1.0 / 36e6)  
+        # 3.4.8. Calculate the nutation in obliquity
+        delta_eps += (
+            (C + D * JCE) * cos(rads) * 1.0 / 36e6
+        ) # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )  
 
     return delta_psi, delta_eps
 
@@ -565,7 +575,9 @@ cdef double true_obliquity_of_the_ecliptic(
         + 2.45 * U**10
     )
 
-    E = E0 * 1.0 / 3600 + delta_eps / 3600                                      # ε = ε0 / 3600 + ∆ε
+    E = (
+        E0 * 1.0 / 3600 + delta_eps / 3600
+    ) # ε = ε0 / 3600 + ∆ε
 
     return E
 
@@ -611,14 +623,14 @@ cdef tuple[double, double] geocentric_right_ascension_and_declination(
 # =============================================================================
 @cython.boundscheck(False)
 @cython.wraparound(False)
-cdef tuple[double,double] topocentric_declination_hour_angle(
+cdef tuple[double,double] topocentric_parallax_right_ascension_and_declination(
     double delta,   # δ geocentric sun declination
     double H,       # H local hour angle
     double E,       # E observer elevation
     double lat,     # observer latitude
     double xi,      # ξ equatorial horizontal parallax
 ) noexcept nogil: # type: ignore
-    cdef double u, x, y, Phi, delta_alpha, delta_prime, H_prime
+    cdef double u, x, y, Phi, delta_alpha, delta_prime
     
     delta = radians(delta)          # δ
     xi = radians(xi)                # ξ
@@ -643,15 +655,72 @@ cdef tuple[double,double] topocentric_declination_hour_angle(
     delta_alpha = atan2(
         -x * sin(xi) * sin(H),
         cos(delta) - x * sin(xi) * cos(H)
-    ) # ∆α = Arctan 2(-x *sin ξ *sin H / cosδ − x * sin ξ * cos H)
+    ) # ∆α = Arctan2(-x *sin ξ *sin H / cosδ − x * sin ξ * cos H)
 
     delta_prime = asin(
         sin(delta) - y * sin(xi) * cos(delta_alpha)
+    ) # ∆' = Arcsin(sinδ − y * sin ξ * cos ∆α)
+
+
+    return degrees(delta_alpha), degrees(delta_prime)
+
+
+# 3.14. Calculate the topocentric zenith angle,
+cdef tuple[double, double, double, double] topocentric_azimuth_angle(
+    double phi,         # φ observer latitude
+    double delta_prime, # δ’ topocentric sun declination
+    double H_prime,     # H’ topocentric local hour angle
+    double P,           # P is the annual average local pressure (in millibars)
+    double T,           # T is the annual average local temperature (in degrees Celsius)
+    double refraction
+) noexcept nogil: # type: ignore
+    cdef double e, e0, delta_e, theta, theta0
+    # - in radians
+    phi = radians(phi)
+    delta_prime = radians(delta_prime)
+    H_prime = radians(H_prime)
+
+    # 3.14.1
+    e0 = (
+        arcsin(sin(phi)* sin(delta_prime) + cos(phi) * cos(delta_prime) * cos(H_prime))
+    ) # e0 = Arcsin(sin ϕ *sin δ'+ cos ϕ *cos δ'*cos H') 
+
+    # - in degrees
+    e0 = degrees(e0)
+
+    # 3.14.2
+    delta_e = (
+        (P / 1010.0) 
+        * (283.0 / (273 + T)) 
+        * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
     )
+    # Note that ∆e = 0 when the sun is below the horizon.
+    delta_e *= e0 >= -1.0 * (0.26667 + refraction)
 
-    # 3.13. Calculate the topocentric local hour angle, H’ (in degrees)
-    H_prime = H - delta_alpha # H' = H − ∆α
+    # 3.14.3. Calculate the topocentric elevation angle, e (in degrees), 
+    e =  e0 + delta_e       # e = e0 + ∆e
 
-    return degrees(delta_prime), H_prime
+    # 3.14.4. Calculate the topocentric zenith angle, 2 (in degrees),
+    theta = 90 - e          # θ = 90 − e
+    theta0 = 90 - e0        # θ0 = 90 − e0
 
+    return e, e0, theta, theta0 
+
+
+
+cdef double topocentric_astronomers_azimuth(
+    double topocentric_local_hour_angle,
+    double topocentric_sun_declination,
+    double observer_latitude
+) noexcept nogil: # type: ignore
+    cdef double topocentric_local_hour_angle_rad, observer_latitude_rad, gamma
+    topocentric_local_hour_angle_rad = radians(topocentric_local_hour_angle)
+    observer_latitude_rad = radians(observer_latitude)
+    num = sin(topocentric_local_hour_angle_rad)
+    denom = (cos(topocentric_local_hour_angle_rad)
+             * sin(observer_latitude_rad)
+             - tan(radians(topocentric_sun_declination))
+             * cos(observer_latitude_rad))
+    gamma = degrees(arctan2(num, denom))
+    return gamma % 360
 

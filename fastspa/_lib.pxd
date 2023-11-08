@@ -6,7 +6,8 @@
 
 # pyright: reportGeneralTypeIssues=false
 cimport cython
-from cython.parallel cimport prange
+from cython.parallel import prange
+from cython.view cimport array as cvarray
 from libc.math cimport (
     sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan, pi
 )
@@ -16,8 +17,33 @@ import numpy as np
 ctypedef unsigned long long u64
 
 # =============================================================================
+# memoryview
+# =============================================================================
+cdef inline cnp.ndarray cast_array(cnp.ndarray a, int n) noexcept:
+    return cnp.PyArray_Cast(a, n) # type: ignore
+
+cdef inline fview(tuple shape) noexcept:
+    return cvarray(shape, itemsize=8, format='d')
+
+
+cdef inline double[:] view1d(int a) noexcept:
+    cdef  double[:] out = fview((a,))
+    return out
+    
+cdef inline double[:, :] view2d(int a, int b) noexcept:
+    cdef  double[:, :] out = fview((a, b))
+    return out
+
+cdef inline double[:, :, :] view3d(int a, int b, int c) noexcept:
+    cdef  double[:, :, :] out = fview((a, b, c))
+    return out
+
+# =============================================================================
+# math
+# =============================================================================
 cdef inline double deg2rad(double deg) noexcept nogil: # type: ignore
     return deg * (pi / 180)
+    
 
 cdef inline double radians(double deg) noexcept nogil: # type: ignore
     return deg * (pi / 180)
@@ -36,16 +62,48 @@ cdef inline double arctan(double x) noexcept nogil: # type: ignore
 cdef inline double arcsin(double x) noexcept nogil: # type: ignore
     return asin(x)
 
+cdef inline double arctan2(double y, double x) noexcept nogil: # type: ignore
+    return atan2(y, x)
+
 # =============================================================================
 # - time
 # =============================================================================
+cdef inline cnp.ndarray dtarray(datetime_like) noexcept:
+    """
+    main entry point for datetime_like.
+    need to add validation to the object so everthing else can be marked as
+    `nogil`
+    
+    """
+    cdef cnp.ndarray dt
+    dt = np.asanyarray(datetime_like, dtype="datetime64[ns]") # type: ignore
+
+    return dt
+
+
+cdef inline double[:] unixtime(cnp.ndarray dt) noexcept:
+    cdef double[:] ut
+    ut = cast_array(dt, cnp.NPY_TYPES.NPY_DOUBLE) // 1e9 # type: ignore
+    return ut
+
+
+cdef inline long[:] years(cnp.ndarray dt) noexcept:
+    cdef long[:] Y = dt.astype("datetime64[Y]").astype(np.int64) + 1970 # type: ignore
+    return Y
+
+
+cdef inline long[:] months(cnp.ndarray dt) noexcept:
+    cdef long[:] M = dt.astype("datetime64[M]").astype(np.int64) % 12 + 1 # type: ignore
+    return M
+
+
 @cython.cdivision(True)
-cdef inline double julian_day(double unixtime)noexcept nogil: # type: ignore
+cdef inline double julian_day(double unixtime) noexcept nogil: # type: ignore
     return unixtime * 1.0 / 86400 + 2440587.5
 
 @cython.cdivision(True)
-cdef inline double  julian_ephemeris_day(double jd, double Dt)noexcept nogil: # type: ignore
-    return jd + Dt * 1.0 / 86400
+cdef inline double  julian_ephemeris_day(double jd, double delta_t)noexcept nogil: # type: ignore
+    return jd + delta_t * 1.0 / 86400
 
 @cython.cdivision(True)
 cdef inline double  julian_century(double jd)noexcept nogil: # type: ignore
@@ -80,16 +138,16 @@ cdef inline double pe4dt(
     long year, long month, bint apply_corection
 ) noexcept nogil: # type: ignore
     """ref https://eclipse.gsfc.nasa.gov/SEcat5/deltatpoly.html"""
-    cdef double Dt, u, y, t
+    cdef double delta_t, u, y, t
 
     y = year + (month - 0.5) / 12
 
     if year < -500:
         u = (y - 1820) / 100
-        Dt = -20 + 32 * u**2
+        delta_t = -20 + 32 * u**2
     elif year < 500:
         u = y / 100
-        Dt = (
+        delta_t = (
             10583.6
             - 1014.41 * u
             + 33.78311 * u**2
@@ -100,7 +158,7 @@ cdef inline double pe4dt(
         )
     elif year < 1600:
         u = (y - 1000) / 100
-        Dt = (
+        delta_t = (
             1574.2
             - 556.01 * u
             + 71.23472 * u**2
@@ -111,10 +169,10 @@ cdef inline double pe4dt(
         )
     elif year < 1700:
         t = y - 1600
-        Dt = 120 - 0.9808 * t - 0.01532 * t**2 + t**3 / 7129
+        delta_t = 120 - 0.9808 * t - 0.01532 * t**2 + t**3 / 7129
     elif year < 1800:
         t = y - 1700
-        Dt = (
+        delta_t = (
             8.83
             + 0.1603 * t
             - 0.0059285 * t**2
@@ -123,7 +181,7 @@ cdef inline double pe4dt(
         )
     elif year < 1860:
         t = y - 1800
-        Dt = (
+        delta_t = (
             13.72
             - 0.332447 * t
             + 0.0068612 * t**2
@@ -135,7 +193,7 @@ cdef inline double pe4dt(
         )
     elif year < 1900:
         t = y - 1860
-        Dt = (
+        delta_t = (
             7.62
             + 0.5737 * t
             - 0.251754 * t**2
@@ -145,7 +203,7 @@ cdef inline double pe4dt(
         )
     elif year < 1920:
         t = y - 1900
-        Dt = (
+        delta_t = (
             -2.79
             + 1.494119 * t
             - 0.0598939 * t**2
@@ -154,16 +212,16 @@ cdef inline double pe4dt(
         )
     elif year < 1941:
         t = y - 1920
-        Dt = 21.20 + 0.84493 * t - 0.076100 * t**2 + 0.0020936 * t**3
+        delta_t = 21.20 + 0.84493 * t - 0.076100 * t**2 + 0.0020936 * t**3
     elif year < 1961:
         t = y - 1950
-        Dt = 29.07 + 0.407 * t - t**2 / 233 + t**3 / 2547
+        delta_t = 29.07 + 0.407 * t - t**2 / 233 + t**3 / 2547
     elif year < 1986:
         t = y - 1975
-        Dt = 45.45 + 1.067 * t - t**2 / 260 - t**3 / 718
+        delta_t = 45.45 + 1.067 * t - t**2 / 260 - t**3 / 718
     elif year < 2005:
         t = y - 2000
-        Dt = (
+        delta_t = (
             63.86
             + 0.3345 * t
             - 0.060374 * t**2
@@ -173,17 +231,17 @@ cdef inline double pe4dt(
         )
     elif year < 2050:
         t = y - 2000
-        Dt = 62.92 + 0.32217 * t + 0.005589 * t**2
+        delta_t = 62.92 + 0.32217 * t + 0.005589 * t**2
     elif year < 2150:
-        Dt = -20 + 32 * ((y - 1820) / 100) ** 2 - 0.5628 * (2150 - y)
+        delta_t = -20 + 32 * ((y - 1820) / 100) ** 2 - 0.5628 * (2150 - y)
     else:
         u = (y - 1820) / 100
-        Dt = -20 + 32 * u**2
+        delta_t = -20 + 32 * u**2
 
     if apply_corection:
-        Dt -= -0.000012932 * (y - 1955) ** 2
+        delta_t -= -0.000012932 * (y - 1955) ** 2
 
-    return Dt                                                              # ΔT
+    return delta_t                                                              # ΔT
 
 
 cdef inline double pres2alt(double pressure) noexcept nogil: # type: ignore
@@ -299,11 +357,28 @@ cdef inline double equatorial_horizontal_parallax(                              
 # =============================================================================
 # 3.12. Calculate the topocentric sun right ascension "’ (in degrees): 
 # 3.12.2. Calculate the term u (in radians),
-cdef tuple[double,double] topocentric_declination_hour_angle(
-    # double alpha,   # α geocentric sun right ascension
-    double delta,   # δ geocentric sun declination
-    double H,       # H local hour angle
-    double E,       # E observer elevation
-    double lat,     # observer latitude
-    double xi,      # ξ equatorial horizontal parallax
+cdef tuple[double,double] topocentric_parallax_right_ascension_and_declination(
+    double delta,       # δ geocentric sun declination
+    double H,           # H local hour angle
+    double E,           # E observer elevation
+    double lat,         # observer latitude
+    double xi,          # ξ equatorial horizontal parallax
+) noexcept nogil # type: ignore
+
+# 3.14. Calculate the topocentric zenith angle,
+cdef tuple[double, double, double, double] topocentric_azimuth_angle(
+    double phi,         # φ observer latitude
+    double delta_prime, # δ’ topocentric sun declination
+    double H_prime,     # H’ topocentric local hour angle
+    double P,           # P is the annual average local pressure (in millibars)
+    double T,           # T is the annual average local temperature (in degrees Celsius)
+    double refraction
+) noexcept nogil # type: ignore
+
+
+
+cdef double topocentric_astronomers_azimuth(
+    double topocentric_local_hour_angle,
+    double topocentric_sun_declination,
+    double observer_latitude,
 ) noexcept nogil # type: ignore
