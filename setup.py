@@ -22,45 +22,18 @@ if TEST:
 include_dirs = [".", np.get_include()]
 
 
-def find_extensions(src: str):
+def find_extensions(src: str, p: str, **kwargs):
     return [
         Extension(
-            os.path.splitext(os.path.basename(path))[0],
-            [path],
-            include_dirs=include_dirs,
-            define_macros=define_macros,
+            f"{src}.{os.path.splitext(os.path.basename(m))[0]}",
+            [os.path.join(src, m)],
+            **kwargs,
         )
-        for path in glob.glob(os.path.join(src, "*.pyx"))
+        for m in glob.glob(p, root_dir=src)
     ]
 
 
-extension_modules = find_extensions("fastspa")
-extension_modules = [
-    Extension(
-        "fastspa._core",
-        ["fastspa/_core.pyx"],
-        include_dirs=include_dirs,
-        define_macros=define_macros,
-    ),
-    Extension(
-        "fastspa._lib",
-        ["fastspa/_lib.pyx"],
-        include_dirs=include_dirs,
-        define_macros=define_macros,
-    ),
-    Extension(
-        "fastspa._terms",
-        ["fastspa/_terms.pyx"],
-        include_dirs=include_dirs,
-        define_macros=define_macros,
-    ),
-    # Extension(
-    #     "fastspa._view",
-    #     ["fastspa/_view.pxd"],
-    #     include_dirs=include_dirs,
-    #     define_macros=define_macros,
-    # ),
-]
+extension_modules = find_extensions("fast_spa", "*.pyx", include_dirs=include_dirs, define_macros=define_macros)
 
 setup(
     ext_modules=cythonize(extension_modules, compiler_directives=compiler_directives),

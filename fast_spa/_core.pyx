@@ -17,7 +17,6 @@ cnp.import_umath()
 
 ctypedef cnp.float64_t DTYPE_t 
 
-DTYPE = np.float64
 
 cdef int TOPOCENTRIC_RIGHT_ASCENSION = 0
 cdef int TOPOCENTRIC_DECLINATION = 1
@@ -26,6 +25,24 @@ cdef int EQUATOIRAL_HORIZONAL_PARALAX = 3
 cdef int NUM_TIME_COMPONENTS = 4
 
 
+cdef fused Elevation_t:
+    double
+    NDArray[DTYPE_t, ndim=1]
+
+cdef fused Pressure_t:
+    double
+    NDArray[DTYPE_t, ndim=1]
+
+cdef fused Temperature_t:
+    double
+    NDArray[DTYPE_t, ndim=1]
+
+cdef fused Refraction_t:
+    double
+    NDArray[DTYPE_t, ndim=1]
+
+
+DTYPE = np.float64
 cdef enum Out:
     ZENITH_ANGLE = 0
     APARENT_ZENITH_ANGLE = 1
@@ -251,10 +268,10 @@ cdef NDArray _fast_spa(
     double[:, :] tc,
     NDArray[DTYPE_t, ndim=1] lat,
     NDArray[DTYPE_t, ndim=1] lon,
-    NDArray[DTYPE_t, ndim=1] E,
-    double P,
-    double T,
-    double refct,
+    Elevation_t E,
+    Pressure_t P,
+    Temperature_t T,
+    Refraction_t refct,
     int num_threads
 ):
     cdef int i, n
@@ -329,49 +346,89 @@ def fast_spa(
     datetime_like: ArrayLike,
     latitude: ArrayLike,
     longitude: ArrayLike,
-    elevation: ArrayLike | None = None,
-    pressure: ArrayLike | None = None,
-    temperature: ArrayLike | None = None,
-    refraction: ArrayLike | None = None,
+    elevation: ArrayLike = 0.0,
+    pressure: ArrayLike = 1013.25,
+    temperature: ArrayLike = 12.0,
+    refraction: ArrayLike = 0.0,
     apply_correction = False,
     int num_threads = 1,
 ):
-    cdef NDArray out
+    cdef NDArray out, lats, lons
+    cdef int size
     cdef double[:] ut, delta_t
     cdef double[:, :] time_components
 
     ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
     time_components = _time_components(ut, delta_t, num_threads=num_threads)
     
-    latitude = np.asfarray(latitude, dtype=np.float64)
-    longitude = np.asfarray(longitude, dtype=np.float64)
+    lats = np.asfarray(latitude, dtype=np.float64)
+    lons = np.asfarray(longitude, dtype=np.float64)
+
+    if not lats.ndim == lons.ndim:
+        lats, lons = np.meshgrid(lats, lons)
+
+    assert lats.ndim == lons.ndim
+
     shape = ()
+    if lats.ndim == 2:
+        shape = (5, time_components.shape[1], lats.shape[0], lats.shape[1])
+        lats, lons = lats.ravel(), lons.ravel()
+    size = lats.size
+    if np.isscalar(elevation) and np.isscalar(pressure) and np.isscalar(temperature) and np.isscalar(refraction):
+        out = _fast_spa[double, double, double, double](
+            time_components,
+            lats,
+            lons,
+            elevation,
+            pressure,
+            temperature,
+            refraction,
+            num_threads,
+        )
+    elif not np.isscalar(elevation) and np.isscalar(pressure) and np.isscalar(temperature) and np.isscalar(refraction):
+        # elev = np.asfarray(elevation)
+        # if elev.ndim == 2:
+        #     elev = elev.ravel()
 
-    if not latitude.ndim == longitude.ndim:
-        latitude, longitude = np.meshgrid(latitude, longitude)
-        
-    assert latitude.ndim == longitude.ndim
+        # assert elev.size == lats.size
+        out = _fast_spa[NDArray, double, double, double](
+            time_components,
+            lats,
+            lons,
+            farray1d(elevation, size),
+            pressure,
+            temperature,
+            refraction,
+            num_threads,
+        )
 
-    if latitude.ndim == 2:
-        shape = (5, time_components.shape[1]) + latitude.shape
-        latitude, longitude = latitude.ravel(), longitude.ravel()
-
-    out = _fast_spa(
-        time_components,
-        latitude,
-        longitude,
-        np.full_like(latitude, 0.0),
-        1013.25,
-        12.0,
-        0.0,
-        # np.full_like(latitude, 1013.25),
-        # np.full_like(latitude, 12.0),
-        # np.full_like(latitude, 0.0),
-        num_threads
-    )
-
+    else:
+        out = _fast_spa[NDArray, NDArray, NDArray, NDArray](
+            time_components,
+            lats,
+            lons,
+            farray1d(elevation, size),
+            farray1d(pressure, size),
+            farray1d(temperature, size),
+            farray1d(refraction, size),
+            num_threads,
+        )
     if shape:
         out = out.reshape(shape)
 
     return out
 
+cdef NDArray farray1d(object x, int size):
+    x = np.asfarray(x, dtype=np.float64)
+    if x.ndim == 0:
+        return x[np.newaxis]
+    elif x.ndim > 1:
+        x = x.ravel()
+    assert x.size == size
+    return x
+    # if np.isscalar(x):
+    #     return np.asfarray([x], dtype=np.float64)
+    # if x.ndim
+
+
+    # return x

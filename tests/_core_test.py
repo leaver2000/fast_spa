@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 import pvlib.spa as spa
 
-import fastspa._core as fastspa
+import fast_spa._core as fastspa
 
 
 date_objs = [
@@ -69,7 +69,7 @@ def test_fastspa(obj: list[Any]) -> None:
     y = np.linspace(-90, 90, 20)
     xx, yy = np.meshgrid(x, y)
     x = fastspa.fast_spa(obj, yy, xx)
-    print(x.shape)
+    # print(x.shape)
 
 
 def slow_spa(
@@ -120,9 +120,57 @@ def test_f(obj):
     # slow spa...
     x = slow_spa(obj, lat, lon, elevation, pressure, temp, refraction)
 
-    y = fastspa.fast_spa(obj, lat, lon, elevation, pressure, temp, refraction)
+    y = fastspa.fast_spa(obj, lat, lon, [0.0], 0.0, 0.0, 0.0)
 
     # there appears to be some differences with the division
     # in the c api. specifically regarding the delta
     # δ  = arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
     assert np.allclose(x.ravel(), y.ravel(), atol=1e-2)
+
+
+@pytest.mark.parametrize("obj", date_objs)
+def test_fast_spa_with_weird_args(obj):
+    # 200x200km area
+    P0 = 1013.25
+    E = 0.0
+    R = 0.5667
+    T = 12.0
+
+    lats = np.linspace(30, 31, 100)
+    lons = np.linspace(-80, -79, 100)
+    lats, lons = np.meshgrid(lats, lons)
+
+    all_scalars = fastspa.fast_spa(
+        obj,
+        lats,
+        lons,
+        elevation=E,
+        pressure=P0,
+        temperature=T,
+        refraction=R,
+    )
+
+    elev_array = fastspa.fast_spa(
+        obj,
+        lats,
+        lons,
+        elevation=np.full_like(lats, E),
+        pressure=P0,
+        temperature=T,
+        refraction=R,
+    )
+    assert elev_array.shape == all_scalars.shape == (5, len(obj)) + lats.shape
+
+    # pressure = np.array([1013.25])
+    # refraction = np.array([0.5667])
+    # temp = np.array([12])
+    # elevation = np.array([0])
+    # lon = np.array([0])
+    # lat = np.array([0])
+    # # slow spa...
+    # x = slow_spa(obj, lat, lon, elevation, pressure, temp, refraction)
+
+    # # there appears to be some differences with the division
+    # # in the c api. specifically regarding the delta
+    # # δ  = arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
+    # assert np.allclose(x.ravel(), y.ravel(), atol=1e-2)
