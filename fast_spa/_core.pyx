@@ -17,6 +17,7 @@ cnp.import_umath()
 
 ctypedef cnp.float64_t DTYPE_t 
 
+DTYPE = np.float64
 
 cdef int TOPOCENTRIC_RIGHT_ASCENSION = 0
 cdef int TOPOCENTRIC_DECLINATION = 1
@@ -42,13 +43,24 @@ cdef fused Refraction_t:
     NDArray[DTYPE_t, ndim=1]
 
 
-DTYPE = np.float64
+
+
 cdef enum Out:
     ZENITH_ANGLE = 0
     APARENT_ZENITH_ANGLE = 1
     ELEVATION_ANGLE = 2
     APARENT_ELEVATION_ANGLE = 3
     AZIMUTH_ANGLE = 4
+
+cdef NDArray farray1d(object x, int size):
+    x = np.asfarray(x, dtype=DTYPE)
+    if x.ndim == 0:
+        return x[np.newaxis]
+    elif x.ndim > 1:
+        x = x.ravel()
+    assert x.size == size
+    return x
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -197,19 +209,22 @@ cdef double[:, :] _time_components(
 
         # - 3.2 Calculate the Earth heliocentric longitude, latitude, 
         # and radius vector (L, B, and R)
-        L = terms.heliocentric_longitude(jme, num_threads=num_threads)                       # L = ∑ X j *Yi, j
-        B = terms.heliocentric_latitude(jme, num_threads=num_threads)                        # B = ∑ X j *Yi, j
-        R = terms.heliocentric_radius_vector(jme, num_threads=num_threads)                   # R = ∑ X j *Yi, j
+        L = terms.heliocentric_longitude(jme, num_threads=num_threads)          # L = ∑ X j *Yi, j
+        B = terms.heliocentric_latitude(jme, num_threads=num_threads)           # B = ∑ X j *Yi, j
+        R = terms.heliocentric_radius_vector(jme, num_threads=num_threads)      # R = ∑ X j *Yi, j
 
         # - 3.3 Calculate the geocentric longitude and latitude
         O = (L + 180.0) % 360.0                                                 # Θ = L + 180 geocentric longitude (in degrees)
 
         # - 3.4 Calculate the nutation in longitude and obliquity
-        (
-            delta_psi, delta_eps                                                # ∆ψ, ∆ε
-        ) = terms.nutation_in_longitude_and_obliquity(jce, num_threads=num_threads)
+        
+        delta_psi, delta_eps = (
+            terms.nutation_in_longitude_and_obliquity(                          # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
+                jce, num_threads=num_threads                                    # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )    
+            )
+        )
         # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
-        # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )
+        
         # - 3.5 Calculate the true obliquity of the ecliptic
         E = lib.true_obliquity_of_the_ecliptic(jme, delta_eps)                  # ε = ε0 / 3600 + ∆ε
 
@@ -225,12 +240,12 @@ cdef double[:, :] _time_components(
         )
         
         # - 3.9,3.10 Calculate the geocentric sun right ascension & declination
-        # out[HELIOCENTRIC_RADIUS_VECTOR, i] = R
-        (
-            out[TOPOCENTRIC_RIGHT_ASCENSION, i],                                # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
-            out[TOPOCENTRIC_DECLINATION, i]                                     # δ = Arcsin(sin β *cos ε + cos β *sin ε *sin λ) 
-        ) = lib.geocentric_right_ascension_and_declination(Lambda, -B, E)
 
+        out[TOPOCENTRIC_RIGHT_ASCENSION, i],out[TOPOCENTRIC_DECLINATION, i] = ( # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
+            lib.geocentric_right_ascension_and_declination(Lambda, -B, E)       # δ = Arcsin(sin β *cos ε + cos β *sin ε *sin λ) 
+        )
+
+        
         # 3.12.1. Calculate the equatorial horizontal parallax of the sun
         # NOTE: in the name of compute this function is performed out of order
         # because it is independent of the spatial components
@@ -256,8 +271,11 @@ cdef double[:,:] time_components(
     return out
 
 # - python interface
-def get_time_components(datetime_like: ArrayLike, apply_correction = False, int num_threads = 1):
-    return np.asfarray(time_components(datetime_like, apply_correction, num_threads))
+def get_time_components(
+    datetime_like: ArrayLike, apply_correction = False, int num_threads = 1):
+    return np.asfarray(
+        time_components(datetime_like, apply_correction, num_threads)
+    )
 
 # =============================================================================
 @cython.boundscheck(False)
@@ -313,29 +331,37 @@ cdef NDArray _fast_spa(
 
             H_p = radians(H - degrees(delta_alpha))                             # H':rad = H − ∆α
 
-            # 3.14.1
+            # - 3.14.1
             e0 = arcsin(
                 sin(phi) * sin(delta_p) + cos(phi) * cos(delta_p) * cos(H_p)    # e0:rad = Arcsin(sin ϕ *sin ∆' + cos ϕ *cos ∆' *cos H')
             ) 
 
-            # - in degrees
+            
             out[Out.APARENT_ELEVATION_ANGLE, i, :]  = e0 = degrees(e0)          # e0:deg = e0:rad * 180 / π
+
+
             out[Out.APARENT_ZENITH_ANGLE, i, :]     = 90 - e0                   # θ0:deg = 90 − e0:deg
 
-            # 3.14.2
-            delta_e = (
-                (P / 1010.0) * (283.0 / (273 + T))  * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
+            # - 3.14.2 Calculate the atmospheric refraction correction
+            #   - P is the annual average local pressure (in millibars).
+            #   - T is the annual average local temperature (in /C). 
+            #   - e0 is in degrees. Calculate the tangent argument in degrees
+            #       Note that ∆e = 0 when the sun is below the horizon.
+            delta_e = (                                                         # ∆e:deg = P / 1010 * 283 / 273 + T * 1.02 / (60 * tan(e0 + 10.3 / (e0 + 5.11)))
+                (P / 1010) 
+                * (283 / (273 + T))  
+                * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
             ) * (e0 >= -1.0 * (0.26667 + refct))
-            # * e0 >= -1.0 * (0.26667 + refct)# ∆e = (P / 1010) * (283 / (273 + T)) * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
-            # Note that ∆e = 0 when the sun is below the horizon.
 
-            # 3.14.3. Calculate the topocentric elevation angle, e (in degrees), 
+            # - 3.14.3 Calculate the topocentric elevation angle
             out[Out.ELEVATION_ANGLE, i, :] = e =  e0 + delta_e                  # e:deg = e0 + ∆e
+
+            # - 3.14.4 Calculate the topocentric zenith angle
             out[Out.ZENITH_ANGLE, i, :] = 90 - e                                # θ:deg = 90 − e 
 
             gamma = arctan2(
                 sin(H_p), cos(H_p) * sin(phi) - tan(delta_p) * cos(phi)         # γ:rad = ArcTan2(sin H', cos H' *sin ϕ − tan ∆' *cos ϕ)
-            ) # γ:deg = ArcTan2(sin H', cos H' *sin ϕ − tan δ' *cos ϕ)
+            )
 
             out[Out.AZIMUTH_ANGLE, i, :] = (degrees(gamma) + 180) % 360         # A:deg = γ:deg + 180
 
@@ -361,8 +387,8 @@ def fast_spa(
     ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
     time_components = _time_components(ut, delta_t, num_threads=num_threads)
     
-    lats = np.asfarray(latitude, dtype=np.float64)
-    lons = np.asfarray(longitude, dtype=np.float64)
+    lats = np.asfarray(latitude, dtype=DTYPE)
+    lons = np.asfarray(longitude, dtype=DTYPE)
 
     if not lats.ndim == lons.ndim:
         lats, lons = np.meshgrid(lats, lons)
@@ -374,7 +400,12 @@ def fast_spa(
         shape = (5, time_components.shape[1], lats.shape[0], lats.shape[1])
         lats, lons = lats.ravel(), lons.ravel()
     size = lats.size
-    if np.isscalar(elevation) and np.isscalar(pressure) and np.isscalar(temperature) and np.isscalar(refraction):
+    if (
+        np.isscalar(elevation) 
+        and np.isscalar(pressure) 
+        and np.isscalar(temperature) 
+        and np.isscalar(refraction)
+    ):
         out = _fast_spa[double, double, double, double](
             time_components,
             lats,
@@ -385,12 +416,13 @@ def fast_spa(
             refraction,
             num_threads,
         )
-    elif not np.isscalar(elevation) and np.isscalar(pressure) and np.isscalar(temperature) and np.isscalar(refraction):
-        # elev = np.asfarray(elevation)
-        # if elev.ndim == 2:
-        #     elev = elev.ravel()
 
-        # assert elev.size == lats.size
+    elif (
+        not np.isscalar(elevation) 
+        and np.isscalar(pressure) 
+        and np.isscalar(temperature) 
+        and np.isscalar(refraction)
+    ):
         out = _fast_spa[NDArray, double, double, double](
             time_components,
             lats,
@@ -413,22 +445,9 @@ def fast_spa(
             farray1d(refraction, size),
             num_threads,
         )
+
     if shape:
         out = out.reshape(shape)
 
     return out
 
-cdef NDArray farray1d(object x, int size):
-    x = np.asfarray(x, dtype=np.float64)
-    if x.ndim == 0:
-        return x[np.newaxis]
-    elif x.ndim > 1:
-        x = x.ravel()
-    assert x.size == size
-    return x
-    # if np.isscalar(x):
-    #     return np.asfarray([x], dtype=np.float64)
-    # if x.ndim
-
-
-    # return x
