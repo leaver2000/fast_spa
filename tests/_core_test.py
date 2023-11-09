@@ -6,8 +6,6 @@ import numpy as np
 import pvlib.spa as spa
 
 import fastspa._core as fastspa
-import fastspa._utils as utils
-from fastspa._core import Julian
 
 
 date_objs = [
@@ -15,20 +13,6 @@ date_objs = [
     ["2019-01-01 00:00:00", "2019-02-01 00:00:00"],
     ["2019-01-01 00:00:00", "2020-01-01 00:00:00", "2019-01-01 00:00:00"],
 ]
-
-
-@pytest.mark.parametrize("obj", date_objs)
-def test_julian(obj):
-    j = Julian(obj)
-    dt = np.asanyarray(obj, dtype="datetime64[ns]")
-    year = dt.astype("datetime64[Y]").astype(int) + 1970
-    month = dt.astype("datetime64[M]").astype(int) % 12 + 1
-    ut = dt.astype(np.float64) // 1e9
-    assert np.all(j.day == spa.julian_day(ut))
-    assert np.all(j.delta_t == spa.calculate_deltat(year, month))
-    assert np.all(j.ephemeris_day == spa.julian_ephemeris_day(j.day, j.delta_t))
-    assert np.all(j.ephemeris_century == spa.julian_ephemeris_century(j.ephemeris_day))
-    assert np.all(j.ephemeris_millennium == spa.julian_ephemeris_millennium(j.ephemeris_century))
 
 
 @pytest.mark.parametrize("obj", date_objs)

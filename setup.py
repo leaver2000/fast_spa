@@ -6,7 +6,7 @@ from setuptools import Extension, setup
 import numpy as np
 from Cython.Build import cythonize
 
-os.environ["TEST"] = "TRUE"
+# os.environ["TEST"] = "TRUE"
 TEST = os.environ.get("TEST") == "TRUE"
 
 compiler_directives: dict[str, int | bool] = {"language_level": 3}
@@ -45,6 +45,12 @@ extension_modules = [
     Extension(
         "fastspa._lib",
         ["fastspa/_lib.pyx"],
+        include_dirs=include_dirs,
+        define_macros=define_macros,
+    ),
+    Extension(
+        "fastspa._terms",
+        ["fastspa/_terms.pyx"],
         include_dirs=include_dirs,
         define_macros=define_macros,
     ),

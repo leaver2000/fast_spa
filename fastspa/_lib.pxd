@@ -2,15 +2,13 @@
 # cython: boundscheck=False
 # cython: wraparound=False
 # cython: nonecheck=False
-# cython: cdivision=False
+# cython: cdivision=True
 
 # pyright: reportGeneralTypeIssues=false
 cimport cython
-from cython.parallel import prange
 from cython.view cimport array as cvarray
-from libc.math cimport (
-    sin, cos, sqrt, atan2, asin, acos, fabs, fmod, floor, ceil, tan, pi
-)
+from libc.math cimport cos, atan2, asin, pi
+
 cimport numpy as cnp
 import numpy as np
 
@@ -26,6 +24,22 @@ cdef inline fview(tuple shape) noexcept:
     return cvarray(shape, itemsize=8, format='d')
 
 
+# cdef inline double[:] view1d(int a) noexcept:
+#     cdef  double[:] out = np.empty((a,), dtype=np.float64) # type: ignore
+#     return out
+    
+# cdef inline double[:, :] view2d(int a, int b) noexcept:
+#     cdef  double[:, :] out = np.empty((a, b), dtype=np.float64) # type: ignore
+#     return out
+
+# cdef inline double[:, :, :] view3d(int a, int b, int c) noexcept:
+#     cdef  double[:, :, :] out = np.empty((a, b, c), dtype=np.float64) # type: ignore
+#     return out
+
+# cdef inline double[:, :, :, :] view4d(int a, int b, int c, int d) noexcept:
+#     cdef  double[:, :, :, :] out = np.empty((a, b, c, d), dtype=np.float64) # type: ignore
+#     return out
+
 cdef inline double[:] view1d(int a) noexcept:
     cdef  double[:] out = fview((a,))
     return out
@@ -38,21 +52,16 @@ cdef inline double[:, :, :] view3d(int a, int b, int c) noexcept:
     cdef  double[:, :, :] out = fview((a, b, c))
     return out
 
-# =============================================================================
-# math
-# =============================================================================
-cdef inline double deg2rad(double deg) noexcept nogil: # type: ignore
-    return deg * (pi / 180)
-    
+cdef inline double[:, :, :, :] view4d(int a, int b, int c, int d) noexcept:
+    cdef  double[:, :, :, :] out = fview((a, b, c, d))
+    return out
 
+# =============================================================================
+# - math
+# =============================================================================
 cdef inline double radians(double deg) noexcept nogil: # type: ignore
     return deg * (pi / 180)
 
-@cython.cdivision(True)
-cdef inline double rad2deg(double rad) noexcept nogil: # type: ignore
-    return (rad * 180) / pi
-
-@cython.cdivision(True)
 cdef inline double degrees(double rad) noexcept nogil: # type: ignore
     return (rad * 180) / pi
 
@@ -86,40 +95,32 @@ cdef inline double[:] unixtime(cnp.ndarray dt) noexcept:
     ut = cast_array(dt, cnp.NPY_TYPES.NPY_DOUBLE) // 1e9 # type: ignore
     return ut
 
-
 cdef inline long[:] years(cnp.ndarray dt) noexcept:
     cdef long[:] Y = dt.astype("datetime64[Y]").astype(np.int64) + 1970 # type: ignore
     return Y
-
 
 cdef inline long[:] months(cnp.ndarray dt) noexcept:
     cdef long[:] M = dt.astype("datetime64[M]").astype(np.int64) % 12 + 1 # type: ignore
     return M
 
-
-@cython.cdivision(True)
 cdef inline double julian_day(double unixtime) noexcept nogil: # type: ignore
     return unixtime * 1.0 / 86400 + 2440587.5
 
-@cython.cdivision(True)
-cdef inline double  julian_ephemeris_day(double jd, double delta_t)noexcept nogil: # type: ignore
+cdef inline double  julian_ephemeris_day(double jd, double delta_t) noexcept nogil: # type: ignore
     return jd + delta_t * 1.0 / 86400
 
-@cython.cdivision(True)
-cdef inline double  julian_century(double jd)noexcept nogil: # type: ignore
+cdef inline double  julian_century(double jd) noexcept nogil: # type: ignore
     return (jd - 2451545) * 1.0 / 36525
 
-@cython.cdivision(True)
-cdef inline double  julian_ephemeris_century(double jde)noexcept nogil: # type: ignore
+cdef inline double  julian_ephemeris_century(double jde) noexcept nogil: # type: ignore
     return (jde - 2451545) * 1.0 / 36525
 
-@cython.cdivision(True)
-cdef inline double  julian_ephemeris_millennium(double jce)noexcept nogil: # type: ignore
+cdef inline double  julian_ephemeris_millennium(double jce) noexcept nogil: # type: ignore
     return jce * 1.0 / 10
 
 
 cdef inline double apparent_sidereal_time_at_greenwich(
-    double jd, double jc, double E, double Dpsi
+    double jd, double jc, double E, double delta_psi
 ) noexcept nogil: # type: ignore
     cdef double v0, v
 
@@ -130,7 +131,7 @@ cdef inline double apparent_sidereal_time_at_greenwich(
         - jc**3 / 38710000
     ) % 360
 
-    v = v0 + Dpsi * cos(radians(E))                                             # ν = ν0 + ∆ψ * cos ε
+    v = v0 + delta_psi * cos(radians(E))                                             # ν = ν0 + ∆ψ * cos ε
     
     return v
 
@@ -334,16 +335,16 @@ cdef inline double earth_periodic_term_summation(
     vector (L, B, # and R): """
     return a * cos(b + c * jme)
 
-cdef tuple[double, double, double] longitude_latitude_and_radius_vector(        # 3.3.
-    double JME
-) noexcept nogil # type: ignore             
-cdef tuple[double, double] nutation_in_longitude_and_obliquity(                 # 3.4.
-    double JCE
-) noexcept nogil # type: ignore
+# cdef (double, double, double) longitude_latitude_and_radius_vector(        # 3.3.
+#     double jme
+# ) noexcept nogil # type: ignore             
+# cdef (double, double) nutation_in_longitude_and_obliquity(                 # 3.4.
+#     double jce
+# ) noexcept nogil # type: ignore
 cdef double true_obliquity_of_the_ecliptic(         
-    double JME, double delta_eps
+    double jme, double delta_eps
 ) noexcept nogil  # type: ignore
-cdef tuple[double, double] geocentric_right_ascension_and_declination(          # 3.9.
+cdef (double, double) geocentric_right_ascension_and_declination(          # 3.9.
     double apparent_lon, double geocentric_lat, double true_ecliptic_obliquity
 ) noexcept nogil # type: ignore
 # =============================================================================
@@ -357,7 +358,7 @@ cdef inline double equatorial_horizontal_parallax(                              
 # =============================================================================
 # 3.12. Calculate the topocentric sun right ascension "’ (in degrees): 
 # 3.12.2. Calculate the term u (in radians),
-cdef tuple[double,double] topocentric_parallax_right_ascension_and_declination(
+cdef (double, double) topocentric_parallax_right_ascension_and_declination(
     double delta,       # δ geocentric sun declination
     double H,           # H local hour angle
     double E,           # E observer elevation
@@ -366,10 +367,10 @@ cdef tuple[double,double] topocentric_parallax_right_ascension_and_declination(
 ) noexcept nogil # type: ignore
 
 # 3.14. Calculate the topocentric zenith angle,
-cdef tuple[double, double, double, double] topocentric_azimuth_angle(
+cdef (double, double, double, double) topocentric_azimuth_angle(
     double phi,         # φ observer latitude
-    double delta_prime, # δ’ topocentric sun declination
-    double H_prime,     # H’ topocentric local hour angle
+    double delta_p, # δ’ topocentric sun declination
+    double H_p,     # H’ topocentric local hour angle
     double P,           # P is the annual average local pressure (in millibars)
     double T,           # T is the annual average local temperature (in degrees Celsius)
     double refraction
