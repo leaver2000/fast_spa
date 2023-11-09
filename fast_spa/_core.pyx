@@ -14,17 +14,10 @@ from . cimport _lib as lib, _terms as terms
 
 cnp.import_array()
 cnp.import_umath()
-
+# =============================================================================
+# - types
+# =============================================================================
 ctypedef cnp.float64_t DTYPE_t 
-
-DTYPE = np.float64
-
-cdef int TOPOCENTRIC_RIGHT_ASCENSION = 0
-cdef int TOPOCENTRIC_DECLINATION = 1
-cdef int APARENT_SIDEREAL_TIME = 2
-cdef int EQUATOIRAL_HORIZONAL_PARALAX = 3
-cdef int NUM_TIME_COMPONENTS = 4
-
 
 cdef fused Elevation_t:
     double
@@ -42,8 +35,16 @@ cdef fused Refraction_t:
     double
     NDArray[DTYPE_t, ndim=1]
 
+# =============================================================================
+# - constants
+# =============================================================================
+DTYPE = np.float64
 
-
+cdef int TOPOCENTRIC_RIGHT_ASCENSION = 0
+cdef int TOPOCENTRIC_DECLINATION = 1
+cdef int APARENT_SIDEREAL_TIME = 2
+cdef int EQUATOIRAL_HORIZONAL_PARALAX = 3
+cdef int NUM_TIME_COMPONENTS = 4
 
 cdef enum Out:
     ZENITH_ANGLE = 0
@@ -52,14 +53,20 @@ cdef enum Out:
     APARENT_ELEVATION_ANGLE = 3
     AZIMUTH_ANGLE = 4
 
-cdef NDArray farray1d(object x, int size):
-    x = np.asfarray(x, dtype=DTYPE)
-    if x.ndim == 0:
-        return x[np.newaxis]
-    elif x.ndim > 1:
-        x = x.ravel()
-    assert x.size == size
-    return x
+# =============================================================================
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef NDArray farray1d(object x, int size) noexcept:
+    cdef NDArray out
+    out = np.asfarray(x, dtype=DTYPE)
+    if out.ndim == 0:
+        return out[np.newaxis]
+    elif out.ndim > 1:
+        out = out.ravel()
+    assert out.size == size
+    return out
 
 
 @cython.boundscheck(False)
@@ -336,9 +343,7 @@ cdef NDArray _fast_spa(
                 sin(phi) * sin(delta_p) + cos(phi) * cos(delta_p) * cos(H_p)    # e0:rad = Arcsin(sin ϕ *sin ∆' + cos ϕ *cos ∆' *cos H')
             ) 
 
-            
             out[Out.APARENT_ELEVATION_ANGLE, i, :]  = e0 = degrees(e0)          # e0:deg = e0:rad * 180 / π
-
 
             out[Out.APARENT_ZENITH_ANGLE, i, :]     = 90 - e0                   # θ0:deg = 90 − e0:deg
 
@@ -378,9 +383,10 @@ def fast_spa(
     refraction: ArrayLike = 0.0,
     apply_correction = False,
     int num_threads = 1,
-):
+) -> NDArray:
     cdef NDArray out, lats, lons
     cdef int size
+    cdef tuple shape
     cdef double[:] ut, delta_t
     cdef double[:, :] time_components
 
@@ -400,6 +406,7 @@ def fast_spa(
         shape = (5, time_components.shape[1], lats.shape[0], lats.shape[1])
         lats, lons = lats.ravel(), lons.ravel()
     size = lats.size
+
     if (
         np.isscalar(elevation) 
         and np.isscalar(pressure) 

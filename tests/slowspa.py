@@ -48,7 +48,6 @@ def slow_jme(obj):
     delta_t = pvlib.spa.calculate_deltat(year=year, month=month)
 
     jd = pvlib.spa.julian_day(unix_time)
-    # jc = pvlib.spa.julian_century(jd)
     jde = pvlib.spa.julian_ephemeris_day(jd, delta_t=delta_t)
     jce = pvlib.spa.julian_ephemeris_century(jde)
     jme = pvlib.spa.julian_ephemeris_millennium(jce)

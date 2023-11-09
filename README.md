@@ -4,6 +4,12 @@ This is a Cython implementation of the NREL Solar Position Algorithm for Solar
 Radiation Applications. Designed for calculating solar position across
 a temporal and spatial dimension.
 
+```bash
+git clone ...
+python3 -m venv .venv && source .venv/bin/activate
+pip install .
+```
+
 ```python
 import numpy as np
 import fast_spa
