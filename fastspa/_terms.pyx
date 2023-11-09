@@ -1,18 +1,14 @@
 # cython: language_level=3
-# cython: boundscheck=False
-# cython: wraparound=False
-# cython: nonecheck=False
-# cython: cdivision=True
 
 # pyright: reportGeneralTypeIssues=false
-cimport cython
 import cython
-from cython.parallel cimport prange
-cimport numpy as cnp
+cimport cython
+from cython.parallel cimport prange # type: ignore
 from libc.math cimport sin, cos, pi
 
 import numpy as np
-cnp.import_array()
+cimport numpy as np
+np.import_array()
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -329,8 +325,11 @@ cdef double _heilo(
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-cdef double longitude(double jme, int num_threads) noexcept nogil: # type: ignore
-
+cdef double heliocentric_longitude(double jme, int num_threads) noexcept nogil: # type: ignore
+    """
+    Heliocentric means that the Earth position is calculated with respect to 
+    the center of the sun.
+    """
     cdef double L, l0, l1, l2, l3, l4, l5
 
     l0 = _heilo(jme, L0, num_threads=num_threads)
@@ -339,41 +338,49 @@ cdef double longitude(double jme, int num_threads) noexcept nogil: # type: ignor
     l3 = _heilo(jme, L3, num_threads=num_threads)
     l4 = _heilo(jme, L4, num_threads=num_threads)
     l5 = _heilo(jme, L5, num_threads=num_threads)
-    L = degrees(
-        (
-            l0 
-            + l1 * jme 
-            + l2 * jme**2 
-            + l3 * jme**3 
-            + l4 * jme**4 
-            + l5 * jme**5
-        )  / 1e8
-    ) % 360    
-    return L
+    # 3.2.4.
+    L = (
+        l0 + l1 * jme + l2 * jme**2 + l3 * jme**3 + l4 * jme**4 + l5 * jme**5
+    )  / 1e8
+
+    return degrees(L) % 360
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-cdef double latitude(double jme, int num_threads) noexcept nogil: # type: ignore
+cdef double heliocentric_latitude(double jme, int num_threads) noexcept nogil: # type: ignore
+    """
+    Heliocentric means that the Earth position is calculated with respect to 
+    the center of the sun.
+    """
     cdef double B, b0, b1
+
     b0 = _heilo(jme, B0, num_threads=num_threads)
     b1 = _heilo(jme, B1, num_threads=num_threads)
-    B = degrees((b0 + b1 * jme) / 1e8)
-    return B
+    B = (b0 + b1 * jme) / 1e8
+
+    return degrees(B)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.nonecheck(False)
 @cython.cdivision(True)
-cdef double radius_vector(double jme, int num_threads)  noexcept nogil: # type: ignore
+cdef double heliocentric_radius_vector(double jme, int num_threads)  noexcept nogil: # type: ignore
+    """
+    Heliocentric means that the Earth position is calculated with respect to 
+    the center of the sun.
+    """
     cdef double R, r0, r1, r2, r3, r4
+
     r0 = _heilo(jme, R0, num_threads=num_threads)
     r1 = _heilo(jme, R1, num_threads=num_threads)
     r2 = _heilo(jme, R2, num_threads=num_threads)
     r3 = _heilo(jme, R3, num_threads=num_threads)
     r4 = _heilo(jme, R4, num_threads=num_threads)
     R = (r0 + r1 * jme + r2 * jme**2 + r3 * jme**3 + r4 * jme**4) / 1e8
+
     return R
 # =============================================================================
 # 3.3. Calculate the geocentric longitude and latitude (Θ and β)
@@ -519,6 +526,10 @@ assert len(LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS) == len(LONGITUDE_A
 cdef int NUM_LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS = len(LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS)
 
 
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
 cdef (double, double) nutation_in_longitude_and_obliquity(
     double jce, int num_threads
 ) noexcept nogil: # type: ignore
@@ -527,6 +538,7 @@ cdef (double, double) nutation_in_longitude_and_obliquity(
 
     delta_psi = 0.0
     delta_eps = 0.0
+
     for i in prange(
         NUM_LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS, 
         nogil=True, 
@@ -563,7 +575,7 @@ cdef (double, double) nutation_in_longitude_and_obliquity(
         X4 = (
             125.04452 - 1934.136261 * jce + 0.0020708 * jce**2 + jce**3 / 45e4
         )
-    
+
         # - in radians
         rads = radians(Y0 * X0 + Y1 * X1 + Y2 * X2 + Y3 * X3 + Y4 * X4)
 

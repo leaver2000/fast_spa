@@ -7,19 +7,151 @@
 # pyright: reportGeneralTypeIssues=false
 cimport cython
 import cython
-# from cython.parallel cimport prange
-cimport numpy as cnp
-from libc.math cimport sin, cos, atan2, asin, tan
 
-import numpy as np
-cnp.import_array()
+from libc.math cimport sin, cos, atan2, tan
 
+
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef double pe4dt(
+    long year, long month, bint apply_corection
+) noexcept nogil: # type: ignore
+    """ref https://eclipse.gsfc.nasa.gov/SEcat5/deltatpoly.html"""
+    cdef double delta_t, u, y, t
+
+    y = year + (month - 0.5) / 12
+
+    if year < -500:
+        u = (y - 1820) / 100
+        delta_t = -20 + 32 * u**2
+    elif year < 500:
+        u = y / 100
+        delta_t = (
+            10583.6
+            - 1014.41 * u
+            + 33.78311 * u**2
+            - 5.952053 * u**3
+            - 0.1798452 * u**4
+            + 0.022174192 * u**5
+            + 0.0090316521 * u**6
+        )
+    elif year < 1600:
+        u = (y - 1000) / 100
+        delta_t = (
+            1574.2
+            - 556.01 * u
+            + 71.23472 * u**2
+            + 0.319781 * u**3
+            - 0.8503463 * u**4
+            - 0.005050998 * u**5
+            + 0.0083572073 * u**6
+        )
+    elif year < 1700:
+        t = y - 1600
+        delta_t = 120 - 0.9808 * t - 0.01532 * t**2 + t**3 / 7129
+    elif year < 1800:
+        t = y - 1700
+        delta_t = (
+            8.83
+            + 0.1603 * t
+            - 0.0059285 * t**2
+            + 0.00013336 * t**3
+            - t**4 / 1174000
+        )
+    elif year < 1860:
+        t = y - 1800
+        delta_t = (
+            13.72
+            - 0.332447 * t
+            + 0.0068612 * t**2
+            + 0.0041116 * t**3
+            - 0.00037436 * t**4
+            + 0.0000121272 * t**5
+            - 0.0000001699 * t**6
+            + 0.000000000875 * t**7
+        )
+    elif year < 1900:
+        t = y - 1860
+        delta_t = (
+            7.62
+            + 0.5737 * t
+            - 0.251754 * t**2
+            + 0.01680668 * t**3
+            - 0.0004473624 * t**4
+            + t**5 / 233174
+        )
+    elif year < 1920:
+        t = y - 1900
+        delta_t = (
+            -2.79
+            + 1.494119 * t
+            - 0.0598939 * t**2
+            + 0.0061966 * t**3
+            - 0.000197 * t**4
+        )
+    elif year < 1941:
+        t = y - 1920
+        delta_t = 21.20 + 0.84493 * t - 0.076100 * t**2 + 0.0020936 * t**3
+    elif year < 1961:
+        t = y - 1950
+        delta_t = 29.07 + 0.407 * t - t**2 / 233 + t**3 / 2547
+    elif year < 1986:
+        t = y - 1975
+        delta_t = 45.45 + 1.067 * t - t**2 / 260 - t**3 / 718
+    elif year < 2005:
+        t = y - 2000
+        delta_t = (
+            63.86
+            + 0.3345 * t
+            - 0.060374 * t**2
+            + 0.0017275 * t**3
+            + 0.000651814 * t**4
+            + 0.00002373599 * t**5
+        )
+    elif year < 2050:
+        t = y - 2000
+        delta_t = 62.92 + 0.32217 * t + 0.005589 * t**2
+    elif year < 2150:
+        delta_t = -20 + 32 * ((y - 1820) / 100) ** 2 - 0.5628 * (2150 - y)
+    else:
+        u = (y - 1820) / 100
+        delta_t = -20 + 32 * u**2
+
+    if apply_corection:
+        delta_t -= -0.000012932 * (y - 1955) ** 2
+
+    return delta_t                                                              # ΔT
+
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
+cdef double apparent_sidereal_time_at_greenwich(
+    double jd, double jc, double E, double delta_psi
+) noexcept nogil: # type: ignore
+    cdef double v0, v
+
+    v0 = (
+        280.46061837 
+        + 360.98564736629 * (jd - 2451545) 
+        + 0.000387933 * jc **2 
+        - jc**3 / 38710000
+    ) % 360
+
+    v = v0 + delta_psi * cos(radians(E))                                             # ν = ν0 + ∆ψ * cos ε
+
+    return v
 
 # =====================================================================================================================
 # 3.5. Calculate the true obliquity of the ecliptic, g (in degrees):
 # =====================================================================================================================
 @cython.boundscheck(False)
-@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
 cdef double true_obliquity_of_the_ecliptic(
     double jme, double delta_eps
 ) noexcept nogil: # type: ignore
@@ -50,13 +182,10 @@ cdef double true_obliquity_of_the_ecliptic(
 # 3.9	 Calculate the geocentric sun right ascension, " (in degrees):
 # 3.10.	 Calculate the geocentric sun declination, * (in degrees): 
 # =============================================================================
-
-
-
-
 @cython.boundscheck(False)
 @cython.wraparound(False)
-@cython.cdivision(False)
+@cython.nonecheck(False)
+@cython.cdivision(True)
 cdef (double, double) geocentric_right_ascension_and_declination(
     double apparent_lon, double geocentric_lat, double true_ecliptic_obliquity
 ) noexcept nogil: # type: ignore
@@ -79,112 +208,3 @@ cdef (double, double) geocentric_right_ascension_and_declination(
     delta = degrees(delta)                                                      # δ
 
     return alpha, delta
-
-
-# =============================================================================
-# 3.12 Calculate the topocentric sun right ascension and declination, α' and δ'
-# 3.13. Calculate the topocentric local hour angle, H’ (in degrees)
-# =============================================================================
-@cython.boundscheck(False)
-@cython.wraparound(False)
-cdef tuple[double,double] topocentric_parallax_right_ascension_and_declination(
-    double delta,   # δ geocentric sun declination
-    double H,       # H local hour angle
-    double E,       # E observer elevation
-    double lat,     # observer latitude
-    double xi,      # ξ equatorial horizontal parallax
-) noexcept nogil: # type: ignore
-    cdef double u, x, y, Phi, delta_alpha, delta_p
-    
-    delta = radians(delta)          # δ
-    xi = radians(xi)                # ξ
-    Phi = radians(lat)              # ϕ
-
-    # - 3.12.2. Calculate the term u (in radians)
-    u = (
-        arctan(0.99664719 * tan(Phi))
-    ) # u = Acrtan(0.99664719 * tan ϕ)
-
-    # - 3.12.3. Calculate the term x,
-    x = (
-        cos(u) + E / 6378140 * cos(Phi)
-    ) # x = cosu + E / 6378140 * cos ϕ
-
-    # - 3.12.4. Calculate the term y
-    y = (
-        0.99664719 * sin(u) + E / 6378140 * sin(Phi)
-    ) # y = 0.99664719 * sin u + E / 6378140 * sin ϕ
-
-    # - 3.12.5. Calculate the parallax in the sun right ascension (in degrees),
-    delta_alpha = atan2(
-        -x * sin(xi) * sin(H),
-        cos(delta) - x * sin(xi) * cos(H)
-    ) # ∆α = Arctan2(-x *sin ξ *sin H / cosδ − x * sin ξ * cos H)
-
-    delta_p = asin(
-        sin(delta) - y * sin(xi) * cos(delta_alpha)
-    ) # ∆' = Arcsin(sinδ − y * sin ξ * cos ∆α)
-
-
-    return degrees(delta_alpha), degrees(delta_p)
-
-
-# 3.14. Calculate the topocentric zenith angle,
-cdef tuple[double, double, double, double] topocentric_azimuth_angle(
-    double phi,         # φ observer latitude
-    double delta_p,     # δ’ topocentric sun declination
-    double H_p,         # H’ topocentric local hour angle
-    double P,           # P is the annual average local pressure (in millibars)
-    double T,           # T is the annual average local temperature (in degrees Celsius)
-    double refraction
-) noexcept nogil: # type: ignore
-    cdef double e, e0, delta_e, theta, theta0
-    # - in radians
-    phi = radians(phi)
-    delta_p = radians(delta_p)
-    H_p = radians(H_p)
-
-    # 3.14.1
-    e0 = (
-        arcsin(sin(phi)* sin(delta_p) + cos(phi) * cos(delta_p) * cos(H_p))
-    ) # e0 = Arcsin(sin ϕ *sin δ'+ cos ϕ *cos δ'*cos H') 
-
-    # - in degrees
-    e0 = degrees(e0)
-
-    # 3.14.2
-    delta_e = (
-        (P / 1010.0) * (283.0 / (273 + T))  * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
-    ) # ∆e = (P / 1010) * (283 / (273 + T)) * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
-    # Note that ∆e = 0 when the sun is below the horizon.
-    delta_e *= e0 >= -1.0 * (0.26667 + refraction)
-
-    # 3.14.3. Calculate the topocentric elevation angle, e (in degrees), 
-    e =  e0 + delta_e       # e = e0 + ∆e
-
-    # 3.14.4. Calculate the topocentric zenith angle, 2 (in degrees),
-    theta = 90 - e          # θ = 90 − e
-    theta0 = 90 - e0        # θ0 = 90 − e0
-
-    return e, e0, theta, theta0 
-
-
-
-cdef double topocentric_astronomers_azimuth(
-    double topocentric_local_hour_angle,
-    double topocentric_sun_declination,
-    double observer_latitude
-) noexcept nogil: # type: ignore
-    cdef double topocentric_local_hour_angle_rad, phi, gamma
-    topocentric_local_hour_angle_rad = radians(topocentric_local_hour_angle)
-    phi = radians(observer_latitude)
-    # num = sin(topocentric_local_hour_angle_rad)
-
-    # denom = cos(topocentric_local_hour_angle_rad) * sin(phi) - tan(radians(topocentric_sun_declination)) * cos(phi)
-    gamma = arctan2(
-        sin(topocentric_local_hour_angle_rad), 
-        cos(topocentric_local_hour_angle_rad) * sin(phi) - tan(radians(topocentric_sun_declination)) * cos(phi)
-    )
-    
-    return degrees(gamma) % 360
-
