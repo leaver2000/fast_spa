@@ -175,14 +175,16 @@ cdef double topocentric_astronomers_azimuth(
     double topocentric_sun_declination,
     double observer_latitude
 ) noexcept nogil: # type: ignore
-    cdef double topocentric_local_hour_angle_rad, observer_latitude_rad, gamma
+    cdef double topocentric_local_hour_angle_rad, phi, gamma
     topocentric_local_hour_angle_rad = radians(topocentric_local_hour_angle)
-    observer_latitude_rad = radians(observer_latitude)
-    num = sin(topocentric_local_hour_angle_rad)
-    denom = (cos(topocentric_local_hour_angle_rad)
-             * sin(observer_latitude_rad)
-             - tan(radians(topocentric_sun_declination))
-             * cos(observer_latitude_rad))
-    gamma = degrees(arctan2(num, denom))
-    return gamma % 360
+    phi = radians(observer_latitude)
+    # num = sin(topocentric_local_hour_angle_rad)
+
+    # denom = cos(topocentric_local_hour_angle_rad) * sin(phi) - tan(radians(topocentric_sun_declination)) * cos(phi)
+    gamma = arctan2(
+        sin(topocentric_local_hour_angle_rad), 
+        cos(topocentric_local_hour_angle_rad) * sin(phi) - tan(radians(topocentric_sun_declination)) * cos(phi)
+    )
+    
+    return degrees(gamma) % 360
 

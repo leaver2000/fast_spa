@@ -20,40 +20,23 @@ ctypedef unsigned long long u64
 cdef inline cnp.ndarray cast_array(cnp.ndarray a, int n) noexcept:
     return cnp.PyArray_Cast(a, n) # type: ignore
 
-cdef inline fview(tuple shape) noexcept:
+cdef inline viewnd(tuple shape) noexcept:
     return cvarray(shape, itemsize=8, format='d')
 
-
-# cdef inline double[:] view1d(int a) noexcept:
-#     cdef  double[:] out = np.empty((a,), dtype=np.float64) # type: ignore
-#     return out
-    
-# cdef inline double[:, :] view2d(int a, int b) noexcept:
-#     cdef  double[:, :] out = np.empty((a, b), dtype=np.float64) # type: ignore
-#     return out
-
-# cdef inline double[:, :, :] view3d(int a, int b, int c) noexcept:
-#     cdef  double[:, :, :] out = np.empty((a, b, c), dtype=np.float64) # type: ignore
-#     return out
-
-# cdef inline double[:, :, :, :] view4d(int a, int b, int c, int d) noexcept:
-#     cdef  double[:, :, :, :] out = np.empty((a, b, c, d), dtype=np.float64) # type: ignore
-#     return out
-
 cdef inline double[:] view1d(int a) noexcept:
-    cdef  double[:] out = fview((a,))
+    cdef  double[:] out = viewnd((a,))
     return out
     
 cdef inline double[:, :] view2d(int a, int b) noexcept:
-    cdef  double[:, :] out = fview((a, b))
+    cdef  double[:, :] out = viewnd((a, b))
     return out
 
 cdef inline double[:, :, :] view3d(int a, int b, int c) noexcept:
-    cdef  double[:, :, :] out = fview((a, b, c))
+    cdef  double[:, :, :] out = viewnd((a, b, c))
     return out
 
 cdef inline double[:, :, :, :] view4d(int a, int b, int c, int d) noexcept:
-    cdef  double[:, :, :, :] out = fview((a, b, c, d))
+    cdef  double[:, :, :, :] out = viewnd((a, b, c, d))
     return out
 
 # =============================================================================
@@ -88,7 +71,6 @@ cdef inline cnp.ndarray dtarray(datetime_like) noexcept:
     dt = np.asanyarray(datetime_like, dtype="datetime64[ns]") # type: ignore
 
     return dt
-
 
 cdef inline double[:] unixtime(cnp.ndarray dt) noexcept:
     cdef double[:] ut
@@ -329,28 +311,20 @@ cdef inline double alt2pres(double altitude) noexcept nogil: # type: ignore
 
 # =============================================================================
 cdef inline double earth_periodic_term_summation(
-    double a, double b, double c, double jme
-) noexcept nogil: # type: ignore
+    double a, double b, double c, double jme) noexcept nogil: # type: ignore
     """3.2.	 Calculate the Earth heliocentric longitude, latitude, and radius 
     vector (L, B, # and R): """
     return a * cos(b + c * jme)
 
-# cdef (double, double, double) longitude_latitude_and_radius_vector(        # 3.3.
-#     double jme
-# ) noexcept nogil # type: ignore             
-# cdef (double, double) nutation_in_longitude_and_obliquity(                 # 3.4.
-#     double jce
-# ) noexcept nogil # type: ignore
-cdef double true_obliquity_of_the_ecliptic(         
-    double jme, double delta_eps
-) noexcept nogil  # type: ignore
+cdef double true_obliquity_of_the_ecliptic(
+    double jme, double delta_eps) noexcept nogil  # type: ignore
+
 cdef (double, double) geocentric_right_ascension_and_declination(          # 3.9.
     double apparent_lon, double geocentric_lat, double true_ecliptic_obliquity
 ) noexcept nogil # type: ignore
 # =============================================================================
 cdef inline double equatorial_horizontal_parallax(                              # 3.12.1.
-    double R
-) noexcept nogil: # type: ignore
+    double R) noexcept nogil: # type: ignore
     cdef double xi 
     xi = 8.794 / (3600 * R)
     return xi
