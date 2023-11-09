@@ -8,13 +8,15 @@ from numpy.typing import  ArrayLike
 cimport numpy as cnp
 from numpy cimport ndarray as NDArray
 from numpy import sin, cos, tan, arctan, arctan2, arcsin, degrees, radians
+from . cimport _lib as lib, _terms as terms
+
+
 
 ctypedef cnp.float64_t DTYPE_t 
 DTYPE = np.float64
 
-from . cimport _lib as lib, _terms as terms
-
 cnp.import_array()
+cnp.import_umath()
 
 
 
@@ -31,8 +33,7 @@ cdef int APARENT_ELEVATION_ANGLE = 3
 cdef int AZIMUTH_ANGLE = 4
 
 
-cdef unixtime_delta_t(
-    datetime_like, bint apply_correction = 0) noexcept:
+cdef unixtime_delta_t(datetime_like, bint apply_correction = 0) noexcept:
     cdef NDArray dt
     cdef long[:] y, m
     cdef double[:] ut, delta_t
@@ -47,7 +48,7 @@ cdef unixtime_delta_t(
 
     
 cdef double[:] _julian_ephemeris_millennium(
-    double[:] unixtime, double[:] delta_t) noexcept:
+    double[:] unixtime, double[:] delta_t, int num_threads = 1) noexcept:
     cdef int n, i
     cdef double ut, dt
     cdef double[:] out
@@ -56,13 +57,14 @@ cdef double[:] _julian_ephemeris_millennium(
     out = lib.view1d(n)
 
 
-    for i in prange(n, nogil=True):
+    for i in prange(n, nogil=True, num_threads=num_threads):
         ut  = unixtime[i]
         dt = delta_t[i]
-        out[i] = lib.julian_ephemeris_millennium(
-            lib.julian_ephemeris_century(
-                lib.julian_ephemeris_day(
-                    lib.julian_day(ut), dt
+        out[i] = (
+            lib.julian_ephemeris_millennium(
+                lib.julian_ephemeris_century(
+                    lib.julian_ephemeris_day(
+                        lib.julian_day(ut), dt)
                     )
                 )
             )
@@ -136,12 +138,14 @@ def radius_vector(datetime_like, apply_correction=False):
 
 
 cdef double[:, :] _time_components(
-    double[:, :] out,  double[:] unixtime, double[:] delta_t, int num_threads = 1
+    double[:] unixtime, double[:] delta_t, int num_threads = 1
 ) noexcept nogil: # type: ignore
     cdef int n, i
     cdef double ut, dt, jd, jc, jce, jme, L, B, R, O, delta_psi, delta_eps, E, delta_tau, Lambda
-
+    cdef double[:, :] out
     n = len(unixtime)
+    with gil:
+        out = lib.view2d(NUM_TIME_COMPONENTS, n)
 
     for i in prange(n, nogil=True, num_threads=num_threads):
         ut  = unixtime[i]
@@ -180,9 +184,10 @@ cdef double[:, :] _time_components(
         Lambda = (O + delta_psi + delta_tau) % 360.0                            # λ = Θ + ∆ψ + ∆τ
 
         # - 3.8. Calculate the apparent sidereal time at Greenwich (in degrees) 
-        out[APARENT_SIDEREAL_TIME, i] = (                                       # ν = ν0 + ∆ψ * cos ε
-            lib.apparent_sidereal_time_at_greenwich(jd, jc, E, delta_psi)
-        )
+        (
+            out[APARENT_SIDEREAL_TIME, i]           
+        ) = lib.apparent_sidereal_time_at_greenwich(jd, jc, E, delta_psi)       # ν = ν0 + ∆ψ * cos ε
+        
         
         # - 3.9,3.10 Calculate the geocentric sun right ascension & declination
         # out[HELIOCENTRIC_RADIUS_VECTOR, i] = R
@@ -194,13 +199,10 @@ cdef double[:, :] _time_components(
         # 3.12.1. Calculate the equatorial horizontal parallax of the sun
         # NOTE: in the name of compute this function is performed out of order
         # because it is independent of the spatial components
-        out[EQUATOIRAL_HORIZONAL_PARALAX, i] = (                                # ξ = 8.794 / (3600 * R)
-            lib.equatorial_horizontal_parallax(R)
-        )
+        (
+            out[EQUATOIRAL_HORIZONAL_PARALAX, i]
+        ) = lib.equatorial_horizontal_parallax(R)                               # ξ = 8.794 / (3600 * R)
     return out
-
-
-
 
 
 cdef double[:,:] time_components(
@@ -211,8 +213,8 @@ cdef double[:,:] time_components(
     cdef double[:] ut, delta_t
     cdef double[:, :] tc_out
     ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
-    tc_out = lib.view2d(NUM_TIME_COMPONENTS, len(ut))
-    _time_components(tc_out, ut, delta_t, num_threads=num_threads)
+    tc_out = _time_components(ut, delta_t, num_threads=num_threads)
+    
     return tc_out
 
 def get_time_components(datetime_like: ArrayLike, apply_correction = False, int num_threads = 1):
@@ -290,156 +292,156 @@ def get_time_components(datetime_like: ArrayLike, apply_correction = False, int 
 #         out[3, T, Y, X] = e0
 #         out[4, T, Y, X] = phi
 
-cdef void _fast_spa2(
-    (int,int,int) shape,
-    double[:,:] tc,
-    double[:, :] latitude,               # Y
-    double[:, :] longitude,              # X
-    double[:, :] elevation,              # Z
-    double[:, :] pressure,
-    double[:, :] temperature,
-    double[:, :] refraction,
-    double[:, :, :, :] out,
-    int num_threads = 1,
-) noexcept nogil: # type: ignore
-    cdef unsigned long T, Y, X
-    cdef int num_t, num_y, num_x
-    cdef double v, xi, delta, alpha                                             # time components
-    cdef double E, lat, lon, pres, temp, refct                                  # spatial components
-    cdef double H, H_p, delta_alpha, delta_p, e0, e, theta, theta0, gamma, phi
+# cdef void _fast_spa2(
+#     (int,int,int) shape,
+#     double[:,:] tc,
+#     double[:, :] latitude,               # Y
+#     double[:, :] longitude,              # X
+#     double[:, :] elevation,              # Z
+#     double[:, :] pressure,
+#     double[:, :] temperature,
+#     double[:, :] refraction,
+#     double[:, :, :, :] out,
+#     int num_threads = 1,
+# ) noexcept nogil: # type: ignore
+#     cdef unsigned long T, Y, X
+#     cdef int num_t, num_y, num_x
+#     cdef double v, xi, delta, alpha                                             # time components
+#     cdef double E, lat, lon, pres, temp, refct                                  # spatial components
+#     cdef double H, H_p, delta_alpha, delta_p, e0, e, theta, theta0, gamma, phi
 
-    num_t = shape[0]
-    num_y = shape[1]
-    num_x = shape[2]
-    for T in prange(num_t, nogil=False, num_threads=num_threads):
-        # - unpack the time components
-        v       = tc[APARENT_SIDEREAL_TIME, T]                                  # ν
-        xi      = tc[EQUATOIRAL_HORIZONAL_PARALAX, T]                           # ξ
-        delta   = tc[TOPOCENTRIC_DECLINATION, T]                                # δ
-        alpha   = tc[TOPOCENTRIC_RIGHT_ASCENSION, T]                            # α
-        for Y in prange(num_y, nogil=False, num_threads=num_threads):
-            for X in prange(num_x, nogil=False, num_threads=num_threads):
-            # ---------------------------------------------------------------------
-                # - unpack the spatial components
-                E       = elevation[Y, X]                                               # h
-                lat     = latitude[Y, X]                                                # φ
-                lon     = longitude[Y, X]                                               # σ
-                pres    = pressure[Y, X]
-                temp    = temperature[Y, X]
-                refct   = refraction[Y, X]
+#     num_t = shape[0]
+#     num_y = shape[1]
+#     num_x = shape[2]
+#     for T in prange(num_t, nogil=False, num_threads=num_threads):
+#         # - unpack the time components
+#         v       = tc[APARENT_SIDEREAL_TIME, T]                                  # ν
+#         xi      = tc[EQUATOIRAL_HORIZONAL_PARALAX, T]                           # ξ
+#         delta   = tc[TOPOCENTRIC_DECLINATION, T]                                # δ
+#         alpha   = tc[TOPOCENTRIC_RIGHT_ASCENSION, T]                            # α
+#         for Y in prange(num_y, nogil=False, num_threads=num_threads):
+#             for X in prange(num_x, nogil=False, num_threads=num_threads):
+#             # ---------------------------------------------------------------------
+#                 # - unpack the spatial components
+#                 E       = elevation[Y, X]                                               # h
+#                 lat     = latitude[Y, X]                                                # φ
+#                 lon     = longitude[Y, X]                                               # σ
+#                 pres    = pressure[Y, X]
+#                 temp    = temperature[Y, X]
+#                 refct   = refraction[Y, X]
 
-                # ---------------------------------------------------------------------
+#                 # ---------------------------------------------------------------------
                 
-                # - 3.11. Calculate the observer local hour angle, H (in degrees):
-                H = (v + lon - alpha) % 360                                                   # H = ν + σ − α
+#                 # - 3.11. Calculate the observer local hour angle, H (in degrees):
+#                 H = (v + lon - alpha) % 360                                                   # H = ν + σ − α
                 
 
-                # 3.12. Calculate the topocentric sun right ascension "’ (in degrees)
-                (
-                    delta_alpha, delta_p
-                ) = lib.topocentric_parallax_right_ascension_and_declination(delta, H, E, lat, xi)
+#                 # 3.12. Calculate the topocentric sun right ascension "’ (in degrees)
+#                 (
+#                     delta_alpha, delta_p
+#                 ) = lib.topocentric_parallax_right_ascension_and_declination(delta, H, E, lat, xi)
 
-                # 3.13. Calculate the topocentric local hour angle, H’ (in degrees)
-                H_p = H - delta_alpha                                               # H' = H − ∆α
+#                 # 3.13. Calculate the topocentric local hour angle, H’ (in degrees)
+#                 H_p = H - delta_alpha                                               # H' = H − ∆α
 
-                # 3.14. Calculate the topocentric zenith angle
-                (
-                    e, e0, theta, theta0                                                               # e, e0
-                ) = lib.topocentric_azimuth_angle(lat, delta_p, H_p, pres, temp,  refct)
+#                 # 3.14. Calculate the topocentric zenith angle
+#                 (
+#                     e, e0, theta, theta0                                                               # e, e0
+#                 ) = lib.topocentric_azimuth_angle(lat, delta_p, H_p, pres, temp,  refct)
                 
-                # 3.15.	 Calculate the topocentric azimuth angle
-                gamma = lib.topocentric_astronomers_azimuth(H_p, delta_p, lat)
-                phi = (gamma + 180) % 360                                               # φ = γ + 180
+#                 # 3.15.	 Calculate the topocentric azimuth angle
+#                 gamma = lib.topocentric_astronomers_azimuth(H_p, delta_p, lat)
+#                 phi = (gamma + 180) % 360                                               # φ = γ + 180
 
-                out[0, T, Y, X] = theta
-                out[1, T, Y, X] = theta0
-                out[2, T, Y, X] = e
-                out[3, T, Y, X] = e0
-                out[4, T, Y, X] = phi
+#                 out[0, T, Y, X] = theta
+#                 out[1, T, Y, X] = theta0
+#                 out[2, T, Y, X] = e
+#                 out[3, T, Y, X] = e0
+#                 out[4, T, Y, X] = phi
 
 
 
-cdef double[:, :] _grid_component(
-    x: ArrayLike | None,
-    NDArray like,
-    float fill_value
-):
-    cdef double[:,:] out
-    if x is None:
-        x = np.full_like(like, fill_value) # type: ignore
-    elif np.isscalar(x):
-        x = np.full_like(like, x) # type: ignore
-    else:
-        x = np.asfarray(x, dtype=np.float64)
+# cdef double[:, :] _grid_component(
+#     x: ArrayLike | None,
+#     NDArray like,
+#     float fill_value
+# ):
+#     cdef double[:,:] out
+#     if x is None:
+#         x = np.full_like(like, fill_value) # type: ignore
+#     elif np.isscalar(x):
+#         x = np.full_like(like, x) # type: ignore
+#     else:
+#         x = np.asfarray(x, dtype=np.float64)
 
-    # x = np.asfarray(x, dtype=np.float64)
-    if x.ndim == 1:
-        out, _ = np.meshgrid(x, x) # type: ignore
-    else:
-        out = x
+#     # x = np.asfarray(x, dtype=np.float64)
+#     if x.ndim == 1:
+#         out, _ = np.meshgrid(x, x) # type: ignore
+#     else:
+#         out = x
     
 
     
-    return out
+#     return out
 
 
-def fast_spa(
-    datetime_like: ArrayLike,
-    latitude: ArrayLike,
-    longitude: ArrayLike,
-    elevation: ArrayLike | None = None,
-    pressure: ArrayLike | None = None,
-    temperature: ArrayLike | None = None,
-    refraction: ArrayLike | None = None,
-    apply_correction = False,
-    int num_threads = 1,
-):
-    cdef double[:] ut, delta_t
-    ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
+# def fast_spa_old(
+#     datetime_like: ArrayLike,
+#     latitude: ArrayLike,
+#     longitude: ArrayLike,
+#     elevation: ArrayLike | None = None,
+#     pressure: ArrayLike | None = None,
+#     temperature: ArrayLike | None = None,
+#     refraction: ArrayLike | None = None,
+#     apply_correction = False,
+#     int num_threads = 1,
+# ):
+#     cdef double[:] ut, delta_t
+#     ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
 
-    latitude = np.asfarray(latitude, dtype=np.float64)
-    longitude = np.asfarray(longitude, dtype=np.float64)
-    assert latitude.ndim == longitude.ndim
-    input_dim = latitude.ndim
+#     latitude = np.asfarray(latitude, dtype=np.float64)
+#     longitude = np.asfarray(longitude, dtype=np.float64)
+#     assert latitude.ndim == longitude.ndim
+#     input_dim = latitude.ndim
 
-    if input_dim == 1:
-        latitude, longitude = np.meshgrid(latitude, longitude)
-    assert latitude.ndim == longitude.ndim == 2
-    shape = (len(ut), len(latitude), len(longitude))
-    cdef double[:, :] tc_out
-    cdef double[:, :, :, :] out
+#     if input_dim == 1:
+#         latitude, longitude = np.meshgrid(latitude, longitude)
+#     assert latitude.ndim == longitude.ndim == 2
+#     shape = (len(ut), len(latitude), len(longitude))
+#     cdef double[:, :] tc_out
+#     cdef double[:, :, :, :] out
 
-    # -time components
-    tc_out = lib.view2d(NUM_TIME_COMPONENTS, shape[0])
-    _time_components(tc_out, ut, delta_t, num_threads=num_threads)
+#     # -time components
+#     tc_out = lib.view2d(NUM_TIME_COMPONENTS, shape[0])
+#     _time_components(tc_out, ut, delta_t, num_threads=num_threads)
 
     
-    out = lib.view4d(5, shape[0], shape[1], shape[2])
+#     out = lib.view4d(5, shape[0], shape[1], shape[2])
 
-    _fast_spa2(
-        shape, 
-        tc_out,
-        latitude, # type: ignore
-        longitude, # type: ignore
-        _grid_component(elevation, latitude, 0.0), 
-        _grid_component(pressure, latitude, 0.0), 
-        _grid_component(temperature, latitude, 0.0),
-        _grid_component(refraction, latitude, 0.5667),
-        out,
-        num_threads=num_threads,
-    )
-    x = np.asfarray(out)
+#     _fast_spa2(
+#         shape, 
+#         tc_out,
+#         latitude, # type: ignore
+#         longitude, # type: ignore
+#         _grid_component(elevation, latitude, 0.0), 
+#         _grid_component(pressure, latitude, 0.0), 
+#         _grid_component(temperature, latitude, 0.0),
+#         _grid_component(refraction, latitude, 0.5667),
+#         out,
+#         num_threads=num_threads,
+#     )
+#     x = np.asfarray(out)
     
-    if input_dim == 1:
-        # squeeze out the x, mesh grid
-        x = x[..., 0]
-    return x
+#     if input_dim == 1:
+#         # squeeze out the x, mesh grid
+#         x = x[..., 0]
+#     return x
 
 
 
 
 
-cdef  topocentric_parallax_right_ascension_and_declination(
+cdef topocentric_parallax_right_ascension_and_declination(
     double delta,   # δ geocentric sun declination
     cnp.ndarray[DTYPE_t, ndim=1] H,       # H local hour angle
     cnp.ndarray[DTYPE_t, ndim=1] E,       # E observer elevation
@@ -481,23 +483,23 @@ cdef  topocentric_parallax_right_ascension_and_declination(
     return degrees(delta_alpha), degrees(delta_p)
 
 cdef topocentric_azimuth_angle(
-    cnp.ndarray[DTYPE_t, ndim=1] phi,         # φ observer latitude
-    cnp.ndarray[DTYPE_t, ndim=1] delta_p,     # δ’ topocentric sun declination
-    cnp.ndarray[DTYPE_t, ndim=1] H_p,         # H’ topocentric local hour angle
-    double P,           # P is the annual average local pressure (in millibars)
-    double T,           # T is the annual average local temperature (in degrees Celsius)
-    double refraction
+    NDArray[DTYPE_t, ndim=1] phi,           # φ observer latitude
+    NDArray[DTYPE_t, ndim=1] delta_p,       # δ’ topocentric sun declination
+    NDArray[DTYPE_t, ndim=1] H_p,           # H’ topocentric local hour angle
+    double P,                               # P is the annual average local pressure (in millibars)
+    double T,                               # T is the annual average local temperature (in degrees Celsius)
+    double refraction                       # refraction is the atmospheric refraction (in degrees)
 ): # type: ignore
-    cdef cnp.ndarray[DTYPE_t, ndim=1] e, e0, delta_e, theta, theta0
+    cdef NDArray[DTYPE_t, ndim=1] e, e0, delta_e, phi_, delta_p_, H_p_
     # - in radians
-    phi = radians(phi)
-    delta_p = radians(delta_p)
-    H_p = radians(H_p)
+    phi_ = radians(phi)
+    delta_p_ = radians(delta_p)
+    H_p_ = radians(H_p)
 
     # 3.14.1
     e0 = (
-        arcsin(sin(phi)* sin(delta_p) + cos(phi) * cos(delta_p) * cos(H_p))
-    ) # e0 = Arcsin(sin ϕ *sin δ'+ cos ϕ *cos δ'*cos H') 
+        arcsin(sin(phi_)* sin(delta_p_) + cos(phi_) * cos(delta_p_) * cos(H_p_))
+    ) # e0 = Arcsin(sin ϕ *sin δ'+ cos ϕ *cos δ' * cos H') 
 
     # - in degrees
     e0 = degrees(e0)
@@ -513,22 +515,23 @@ cdef topocentric_azimuth_angle(
     e =  e0 + delta_e       # e = e0 + ∆e
 
     # 3.14.4. Calculate the topocentric zenith angle, 2 (in degrees),
-    theta = 90 - e          # θ = 90 − e
-    theta0 = 90 - e0        # θ0 = 90 − e0
+    # theta = 90 - e          # θ = 90 − e
+    # theta0 = 90 - e0        # θ0 = 90 − e0
 
-    return e, e0, theta, theta0 
-
+    return e, e0#, theta, theta0 
+# H_p, delta_p,
 cdef topocentric_astronomers_azimuth(
-    cnp.ndarray[DTYPE_t, ndim=1] topocentric_local_hour_angle,
-    cnp.ndarray[DTYPE_t, ndim=1] topocentric_sun_declination,
-    cnp.ndarray[DTYPE_t, ndim=1] observer_latitude
+    cnp.ndarray[DTYPE_t, ndim=1] H_p,
+    cnp.ndarray[DTYPE_t, ndim=1] delta_p,
+    cnp.ndarray[DTYPE_t, ndim=1] lat
 ): # type: ignore
     # cdef double topocentric_local_hour_angle_rad, phi, gamma
-    topocentric_local_hour_angle_rad = radians(topocentric_local_hour_angle)
-    phi = radians(observer_latitude)
+    H_p_ = radians(H_p)
+    phi_ = radians(lat)
+    delta_p_ = radians(delta_p)
     gamma = arctan2(
-        sin(topocentric_local_hour_angle_rad), 
-        cos(topocentric_local_hour_angle_rad) * sin(phi) - tan(radians(topocentric_sun_declination)) * cos(phi)
+        sin(H_p_), 
+        cos(H_p_) * sin(phi_) - tan(delta_p_) * cos(phi_)
     )
     
     return degrees(gamma) % 360
@@ -545,11 +548,12 @@ cdef c_main(
 ):
     cdef int i, n
     cdef double v, xi, delta, alpha
-    
+    cdef NDArray[DTYPE_t, ndim=1] H, delta_alpha, delta_p, H_p, e0, e, gamma, phi
     cdef NDArray[DTYPE_t, ndim=3] out
-    
+
     n = tc.shape[1]
     out = np.empty((5, n, len(lat)), dtype=DTYPE)
+
     for i in prange(n, nogil=True, num_threads=num_threads):
         v       = tc[APARENT_SIDEREAL_TIME, i]                                  # ν
         xi      = tc[EQUATOIRAL_HORIZONAL_PARALAX, i]                           # ξ
@@ -568,42 +572,54 @@ cdef c_main(
             H_p = H - delta_alpha                                                   # H' = H − ∆α
 
             # 3.14.1
-            (
-                e, e0, theta, theta0                                                               # e, e0
-            ) = topocentric_azimuth_angle(lat, delta_p, H_p, P, T,  refct)
+            phi = radians(lat)
+            delta_p = radians(delta_p)
+            H_p = radians(H_p)
+
+            # 3.14.1
+            e0 = (
+                arcsin(sin(phi)* sin(delta_p) + cos(phi) * cos(delta_p) * cos(H_p))
+            ) # e0 = Arcsin(sin ϕ *sin δ'+ cos ϕ *cos δ' * cos H') 
+
+            # - in degrees
+            out[APARENT_ELEVATION_ANGLE, i, :] = e0 = degrees(e0)
+            out[APARENT_ZENITH_ANGLE, i, :] = 90 - e0
+
+            # 3.14.2
+            delta_e = (
+                (P / 1010.0) * (283.0 / (273 + T))  * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
+            ) * (e0 >= -1.0 * (0.26667 + refct))
+            # * e0 >= -1.0 * (0.26667 + refct)# ∆e = (P / 1010) * (283 / (273 + T)) * 1.02 / (60 * tan(radians(e0 + 10.3 / (e0 + 5.11))))
+            # Note that ∆e = 0 when the sun is below the horizon.
+            # delta_e *= e0 >= -1.0 * (0.26667 + refct)
+
+            # 3.14.3. Calculate the topocentric elevation angle, e (in degrees), 
+            out[ELEVATION_ANGLE, i, :] = e =  e0 + delta_e       # e = e0 + ∆e
+            out[ZENITH_ANGLE, i, :] = 90 - e                                                # theta[zenith angle] 
+
+            gamma = arctan2(
+                sin(H_p), 
+                cos(H_p) * sin(phi) - tan(delta_p) * cos(phi)
+            )
             
-
-            gamma = topocentric_astronomers_azimuth(H_p, delta_p, lat)
-            theta = 90 - e
-            theta0 = 90 - e0
-            phi = (gamma + 180) % 360                                               # φ = γ + 180
-            
-        
-        
-            out[ZENITH_ANGLE, i, :] = theta                                                # theta[zenith angle] 
-            out[APARENT_ZENITH_ANGLE, i, :] = theta0                                               # theta0[aparent zenith angle]
-            out[ELEVATION_ANGLE, i, :] = e                                                    # epsilon[elevation angle]
-            out[APARENT_ELEVATION_ANGLE, i, :] = e0                                                   # epsilon0[apparent elevation angle]
-            out[AZIMUTH_ANGLE, i, :] = phi                                                  # gamma[azimuth angle]
-
-
-
-
+            gamma = degrees(gamma) % 360
+            out[AZIMUTH_ANGLE, i, :] = (gamma + 180) % 360                      # φ = γ + 180
 
     return out
 
 
-
+# cnp.PyArray_
 
 cdef double[:, :] _time_components_new(
     double[:] unixtime, double[:] delta_t, int num_threads = 1
-) noexcept: # type: ignore
+) noexcept nogil: # type: ignore
     cdef int n, i
     cdef double ut, dt, jd, jc, jce, jme, L, B, R, O, delta_psi, delta_eps, E, delta_tau, Lambda
     cdef double[:, :] out
     n = len(unixtime)
-    out = lib.view2d(NUM_TIME_COMPONENTS, n)
-    
+
+    with gil:
+        out = lib.view2d(NUM_TIME_COMPONENTS, n)
 
     for i in prange(n, nogil=True, num_threads=num_threads):
         ut  = unixtime[i]
@@ -663,7 +679,7 @@ cdef double[:, :] _time_components_new(
 
 
 
-def main(
+def fast_spa(
     datetime_like: ArrayLike,
     latitude: ArrayLike,
     longitude: ArrayLike,
