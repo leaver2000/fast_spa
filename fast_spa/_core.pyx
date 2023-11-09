@@ -208,14 +208,13 @@ cdef double[:, :] _time_components(
         ut  = unixtime[i]
         dt = delta_t[i]
 
-        # - 3.1. Calculate the Julian and Julian Ephemeris Day, Century, and Millennium:
+        # - 3.1. Calculate the Julian and Julian Ephemeris Day, Century, and Millennium
         jd = lib.julian_day(ut)
         jc = lib.julian_century(jd)
         jce = lib.julian_ephemeris_century(lib.julian_ephemeris_day(jd, dt))
         jme = lib.julian_ephemeris_millennium(jce)
 
-        # - 3.2 Calculate the Earth heliocentric longitude, latitude, 
-        # and radius vector (L, B, and R)
+        # - 3.2 Calculate the Earth heliocentric longitude, latitude (L, B, R) 
         L = terms.heliocentric_longitude(jme, num_threads=num_threads)          # L = ∑ X j *Yi, j
         B = terms.heliocentric_latitude(jme, num_threads=num_threads)           # B = ∑ X j *Yi, j
         R = terms.heliocentric_radius_vector(jme, num_threads=num_threads)      # R = ∑ X j *Yi, j
@@ -224,13 +223,11 @@ cdef double[:, :] _time_components(
         O = (L + 180.0) % 360.0                                                 # Θ = L + 180 geocentric longitude (in degrees)
 
         # - 3.4 Calculate the nutation in longitude and obliquity
-        
         delta_psi, delta_eps = (
             terms.nutation_in_longitude_and_obliquity(                          # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
                 jce, num_threads=num_threads                                    # ∆ε = (ci + di * JCE ) *cos( ∑ X j *Yi, j )    
             )
         )
-        # ∆ψ = (ai + bi * JCE ) *sin( ∑ X j *Yi, j )
         
         # - 3.5 Calculate the true obliquity of the ecliptic
         E = lib.true_obliquity_of_the_ecliptic(jme, delta_eps)                  # ε = ε0 / 3600 + ∆ε
@@ -247,12 +244,10 @@ cdef double[:, :] _time_components(
         )
         
         # - 3.9,3.10 Calculate the geocentric sun right ascension & declination
-
         out[TOPOCENTRIC_RIGHT_ASCENSION, i],out[TOPOCENTRIC_DECLINATION, i] = ( # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
             lib.geocentric_right_ascension_and_declination(Lambda, -B, E)       # δ = Arcsin(sin β *cos ε + cos β *sin ε *sin λ) 
         )
 
-        
         # 3.12.1. Calculate the equatorial horizontal parallax of the sun
         # NOTE: in the name of compute this function is performed out of order
         # because it is independent of the spatial components
