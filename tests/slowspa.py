@@ -16,7 +16,7 @@ def slow_spa(
     dt = np.asanyarray(obj, dtype="datetime64[ns]")
     unix_time = dt.astype(np.float64) // 1e9
 
-    x = np.stack(
+    return np.stack(
         [
             np.stack(
                 pvlib.spa.solar_position_numpy(
@@ -37,7 +37,6 @@ def slow_spa(
         ],
         axis=1,
     )
-    return x
 
 
 def slow_jme(obj):
@@ -50,6 +49,4 @@ def slow_jme(obj):
     jd = pvlib.spa.julian_day(unix_time)
     jde = pvlib.spa.julian_ephemeris_day(jd, delta_t=delta_t)
     jce = pvlib.spa.julian_ephemeris_century(jde)
-    jme = pvlib.spa.julian_ephemeris_millennium(jce)
-
-    return jme
+    return pvlib.spa.julian_ephemeris_millennium(jce)
