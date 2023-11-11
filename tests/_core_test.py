@@ -72,6 +72,16 @@ def test_fastspa(obj: list[Any]) -> None:
     # print(x.shape)
 
 
+def solar_position_numpy(*args, **kwargs):
+    theta, theta0, e, e0, phi, eot = spa.solar_position_numpy(
+        *args,
+        **kwargs,
+        sst=False,
+        esd=False,
+    )
+    return [theta0, phi]
+
+
 def slow_spa(
     obj,
     lat,
@@ -88,7 +98,7 @@ def slow_spa(
     x = np.stack(
         [
             np.stack(
-                spa.solar_position_numpy(
+                solar_position_numpy(
                     ut,
                     lat=lat,
                     lon=lon,
@@ -98,9 +108,7 @@ def slow_spa(
                     delta_t=delta_t[i : i + 1],
                     atmos_refract=refraction,
                     numthreads=None,
-                    sst=False,
-                    esd=False,
-                )[:-1]
+                )
             )
             for i, ut in enumerate(unix_time)
         ],
@@ -118,14 +126,11 @@ def test_f(obj):
     lon = np.array([0])
     lat = np.array([0])
     # slow spa...
-    x = slow_spa(obj, lat, lon, elevation, pressure, temp, refraction)
+    zen1, azi1 = slow_spa(obj, lat, lon, elevation, pressure, temp, refraction)
+    zen, azi = fastspa.fast_spa(obj, lat, lon, elevation, pressure, temp, refraction)
 
-    y = fastspa.fast_spa(obj, lat, lon, [0.0], 0.0, 0.0, 0.0)
-
-    # there appears to be some differences with the division
-    # in the c api. specifically regarding the delta
-    # δ  = arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
-    assert np.allclose(x.ravel(), y.ravel(), atol=1e-2)
+    assert np.allclose(zen1, zen, atol=1e-3)
+    assert np.allclose(azi1, azi, atol=1e-2)
 
 
 @pytest.mark.parametrize("obj", date_objs)
@@ -159,18 +164,44 @@ def test_fast_spa_with_weird_args(obj):
         temperature=T,
         refraction=R,
     )
-    assert elev_array.shape == all_scalars.shape == (5, len(obj)) + lats.shape
+    assert elev_array.shape == all_scalars.shape == (2, len(obj)) + lats.shape
 
-    # pressure = np.array([1013.25])
-    # refraction = np.array([0.5667])
-    # temp = np.array([12])
-    # elevation = np.array([0])
-    # lon = np.array([0])
-    # lat = np.array([0])
-    # # slow spa...
-    # x = slow_spa(obj, lat, lon, elevation, pressure, temp, refraction)
 
-    # # there appears to be some differences with the division
-    # # in the c api. specifically regarding the delta
-    # # δ  = arcsin(sin(B) * cos(E) + cos(B) * sin(E) * sin(A))
-    # assert np.allclose(x.ravel(), y.ravel(), atol=1e-2)
+@pytest.fixture
+def spa_results():
+    """
+    A.5. Example
+    The results for the following site parameters are listed in Table A5.1:
+    - Date = October 17, 2003. - Time = 12:30:30 Local Standard Time (LST).
+    - Time zone(TZ) = -7 hours. - Longitude = -105.1786/.
+    - Latitude = 39.742476/. - Pressure = 820 mbar.
+    - Elevation = 1830.14 m. - Temperature = 11/C.
+    - Surface slope = 30/. - Surface azimuth rotation = -10/.
+    - )T = 67 Seconds.
+
+    LST must be changed to UT by subtracting TZ from LST, and changing the date if necessary.
+
+    Table A5.1. Results for Example
+    """
+    return (
+        ["2003-10-17 19:30:30"],
+        [39.742476],  # lat
+        [-105.1786],  # lon
+        1830.14,  # elevation
+        820.94,  # pressure
+        11.0,  # temperature
+        0.5667,  # refraction
+        30.0,  # slope
+        -10.0,  # azimuth_rotation
+        67.0,  # delta_t
+    ), (
+        50.11162,  # zenith
+        194.34024,  # azimuth
+    )
+
+
+def test_results_for_example(spa_results):
+    args, (expect_zen, expect_azi) = spa_results
+    zen, azi = fastspa.fast_spa(*args).ravel()
+    assert np.allclose(zen, expect_zen, atol=1e-2)
+    assert np.allclose(azi, expect_azi, atol=1e-2)

@@ -2,12 +2,15 @@
 
 # pyright: reportGeneralTypeIssues=false
 import cython
+
 cimport cython
-from cython.parallel cimport prange # type: ignore
-from libc.math cimport sin, cos, pi
+from cython.parallel cimport prange  # type: ignore
+from libc.math cimport cos, pi, sin
 
 import numpy as np
+
 cimport numpy as np
+
 np.import_array()
 
 @cython.boundscheck(False)

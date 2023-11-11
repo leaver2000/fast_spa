@@ -5,11 +5,12 @@
 # cython: cdivision=True
 
 # pyright: reportGeneralTypeIssues=false
+
 cimport cython
+
 import cython
 
-from libc.math cimport sin, cos, atan2, tan
-
+from libc.math cimport atan2, cos, sin, tan
 
 
 @cython.boundscheck(False)

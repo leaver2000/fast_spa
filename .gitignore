@@ -168,6 +168,6 @@ cython_debug/
 logs/
 *.zarr/**/*
 scratchpad.ipynb
-_spa.c
+.etopo_cache/
 ddata.json
 fastspa/*.c

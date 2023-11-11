@@ -1,16 +1,25 @@
 # cython: language_level=3
-# pyright: reportGeneralTypeIssues=false
+
+# pyright: reportGeneralTypeIssues=false, reportUnusedExpression=false, reportMissingImports=false
+
 import cython
 cimport cython
 from cython.parallel cimport prange
 
 import numpy as np
-from numpy.typing import  ArrayLike
+from numpy.typing import ArrayLike
 cimport numpy as cnp
+from numpy cimport float64_t as f64
 from numpy cimport ndarray as NDArray
-from numpy import sin, cos, tan, arctan, arctan2, arcsin, degrees, radians
+from numpy cimport uint16_t as u16
+from numpy cimport uint32_t as u32
+from numpy cimport uint64_t as u64
 
-from . cimport _lib as lib, _terms as terms
+from numpy import (arccos, arcsin, arctan, arctan2, cos, degrees, radians, sin,
+                   tan)
+
+from . cimport _lib as lib
+from . cimport _terms as terms
 
 cnp.import_array()
 cnp.import_umath()
@@ -21,37 +30,39 @@ ctypedef cnp.float64_t DTYPE_t
 
 cdef fused Elevation_t:
     double
-    NDArray[DTYPE_t, ndim=1]
+    NDArray[DTYPE_t, ndim=1] # type: ignore
 
 cdef fused Pressure_t:
     double
-    NDArray[DTYPE_t, ndim=1]
+    NDArray[DTYPE_t, ndim=1] # type: ignore
 
 cdef fused Temperature_t:
     double
-    NDArray[DTYPE_t, ndim=1]
+    NDArray[DTYPE_t, ndim=1] # type: ignore
 
 cdef fused Refraction_t:
     double
-    NDArray[DTYPE_t, ndim=1]
+    NDArray[DTYPE_t, ndim=1] # type: ignore
 
 # =============================================================================
 # - constants
 # =============================================================================
 DTYPE = np.float64
 
-cdef int TOPOCENTRIC_RIGHT_ASCENSION = 0
-cdef int TOPOCENTRIC_DECLINATION = 1
-cdef int APARENT_SIDEREAL_TIME = 2
-cdef int EQUATOIRAL_HORIZONAL_PARALAX = 3
-cdef int NUM_TIME_COMPONENTS = 4
+# - time components
+cdef u16 RIGHT_ASCENSION = 0
+cdef u16 DECLINATION = 1
+cdef u16 APARENT_SIDEREAL_TIME = 2
+cdef u16 EQUATOIRAL_HORIZONAL_PARALAX = 3
 
-cdef enum Out:
-    ZENITH_ANGLE = 0
-    APARENT_ZENITH_ANGLE = 1
-    ELEVATION_ANGLE = 2
-    APARENT_ELEVATION_ANGLE = 3
-    AZIMUTH_ANGLE = 4
+
+# - spatial components
+cdef u16 ZENITH_ANGLE = 0
+cdef u16 AZIMUTH_ANGLE = 1
+
+
+cdef u16 NUM_TIME_COMPONENTS = 4
+cdef u16 NUM_SPA_COMPONENTS = 2
 
 # =============================================================================
 @cython.boundscheck(False)
@@ -85,6 +96,10 @@ cdef unixtime_delta_t(datetime_like, bint apply_correction = 0) noexcept:
     delta_t = _pe4dt(y, m, apply_correction)
 
     return ut, delta_t
+
+# cimport fast_spa as f
+
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -131,7 +146,8 @@ def julian_ephemeris_millennium(
 @cython.nonecheck(False)
 @cython.cdivision(True)
 cdef double[:] _pe4dt(
-    long[:] years, long[:] months, bint apply_corection) noexcept nogil: # type: ignore
+    long[:] years, long[:] months, bint apply_corection
+) noexcept nogil: # type: ignore
     cdef int n, i
     cdef long year, month
     cdef double[:] out
@@ -165,7 +181,8 @@ def pe4dt(datetime_like, bint apply_correction = 0):
 @cython.nonecheck(False)
 @cython.cdivision(True)
 cdef double[:] _radius_vector(
-    double[:] unixtime, double[:] delta_t, int num_threads = 1) noexcept nogil: # type: ignore
+    double[:] unixtime, double[:] delta_t, int num_threads = 1
+) noexcept nogil: # type: ignore
     cdef int n, i
     cdef double[:] jme, out
 
@@ -180,7 +197,7 @@ cdef double[:] _radius_vector(
     return out
 
 # - python interface
-def radius_vector(datetime_like, apply_correction=False):
+def radius_vector(object datetime_like, bint apply_correction=False):
     cdef double[:] ut, delta_t
 
     ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
@@ -194,7 +211,7 @@ def radius_vector(datetime_like, apply_correction=False):
 @cython.nonecheck(False)
 @cython.cdivision(True)
 cdef double[:, :] _time_components(
-    double[:] unixtime, double[:] delta_t, int num_threads = 1
+    double[:] unixtime, double[:] delta_t, u16 num_threads = 1
 ) noexcept nogil: # type: ignore
     cdef int n, i
     cdef double ut, dt, jd, jc, jce, jme, L, B, R, O, delta_psi, delta_eps, E, delta_tau, Lambda
@@ -244,7 +261,7 @@ cdef double[:, :] _time_components(
         )
         
         # - 3.9,3.10 Calculate the geocentric sun right ascension & declination
-        out[TOPOCENTRIC_RIGHT_ASCENSION, i],out[TOPOCENTRIC_DECLINATION, i] = ( # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
+        out[RIGHT_ASCENSION, i], out[DECLINATION, i] = ( # α = ArcTan2(sin λ *cos ε − tan β *sin ε, cos λ)
             lib.geocentric_right_ascension_and_declination(Lambda, -B, E)       # δ = Arcsin(sin β *cos ε + cos β *sin ε *sin λ) 
         )
 
@@ -254,6 +271,7 @@ cdef double[:, :] _time_components(
         out[EQUATOIRAL_HORIZONAL_PARALAX, i] = 8.794 / (3600 * R)               # ξ = 8.794 / (3600 * R)
     
     return out
+
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -272,12 +290,14 @@ cdef double[:,:] time_components(
 
     return out
 
+
 # - python interface
 def get_time_components(
     datetime_like: ArrayLike, apply_correction = False, int num_threads = 1):
     return np.asfarray(
         time_components(datetime_like, apply_correction, num_threads)
     )
+
 
 # =============================================================================
 @cython.boundscheck(False)
@@ -292,7 +312,9 @@ cdef NDArray _fast_spa(
     Pressure_t P,
     Temperature_t T,
     Refraction_t refct,
-    int num_threads
+    # double W,                                                             # slope of the surface measured from the horizontal plane
+    # double Y,                                                             # surface azimuth rotation angle
+    int num_threads,
 ):
     cdef int i, n
     cdef double v, xi, delta, alpha                                             # time components (ν, ξ, δ, α)
@@ -301,13 +323,13 @@ cdef NDArray _fast_spa(
 
     n   = tc.shape[1]
     phi = radians(lat)                                                          # ϕ
-    out = np.empty((5, n, len(lat)), dtype=DTYPE)
+    out = np.empty((NUM_SPA_COMPONENTS, n, len(lat)), dtype=DTYPE)
 
     for i in prange(n, nogil=True, num_threads=num_threads):
         v       = tc[APARENT_SIDEREAL_TIME, i]                                  # ν
         xi      = lib.radians(tc[EQUATOIRAL_HORIZONAL_PARALAX, i])              # ξ
-        delta   = lib.radians(tc[TOPOCENTRIC_DECLINATION, i])                   # δ
-        alpha   = tc[TOPOCENTRIC_RIGHT_ASCENSION, i]                            # α
+        delta   = lib.radians(tc[DECLINATION, i])                   # δ
+        alpha   = tc[RIGHT_ASCENSION, i]                            # α
 
         with gil:
             # - 3.11. Calculate the observer local hour angle
@@ -333,14 +355,11 @@ cdef NDArray _fast_spa(
 
             H_p = radians(H - degrees(delta_alpha))                             # H':rad = H − ∆α
 
-            # - 3.14.1
+            # - 3.14.1 Calculate the topocentric elevation angle without atmospheric refraction correction
             e0 = arcsin(
                 sin(phi) * sin(delta_p) + cos(phi) * cos(delta_p) * cos(H_p)    # e0:rad = Arcsin(sin ϕ *sin ∆' + cos ϕ *cos ∆' *cos H')
             ) 
-
-            out[Out.APARENT_ELEVATION_ANGLE, i, :]  = e0 = degrees(e0)          # e0:deg = e0:rad * 180 / π
-
-            out[Out.APARENT_ZENITH_ANGLE, i, :]     = 90 - e0                   # θ0:deg = 90 − e0:deg
+            e0 = degrees(e0)                                                    # e0:deg
 
             # - 3.14.2 Calculate the atmospheric refraction correction
             #   - P is the annual average local pressure (in millibars).
@@ -354,39 +373,54 @@ cdef NDArray _fast_spa(
             ) * (e0 >= -1.0 * (0.26667 + refct))
 
             # - 3.14.3 Calculate the topocentric elevation angle
-            out[Out.ELEVATION_ANGLE, i, :] = e =  e0 + delta_e                  # e:deg = e0 + ∆e
+            e =  e0 + delta_e                                                   # e:deg = e0 + ∆e
 
             # - 3.14.4 Calculate the topocentric zenith angle
-            out[Out.ZENITH_ANGLE, i, :] = 90 - e                                # θ:deg = 90 − e 
+            out[ZENITH_ANGLE, i, :]  = 90 - e                                   # θ:deg = 90 − e 
 
-            gamma = arctan2(
-                sin(H_p), cos(H_p) * sin(phi) - tan(delta_p) * cos(phi)         # γ:rad = ArcTan2(sin H', cos H' *sin ϕ − tan ∆' *cos ϕ)
+            # - 3.15.	 Calculate the topocentric azimuth angle
+            # - 3.15.1. Calculate the topocentric astronomers azimuth angle
+            gamma = arctan2(                                                    # Γ:rad = ArcTan2(sin H', cos H' *sin ϕ − tan ∆' *cos ϕ)
+                sin(H_p), cos(H_p) * sin(phi) - tan(delta_p) * cos(phi)
             )
 
-            out[Out.AZIMUTH_ANGLE, i, :] = (degrees(gamma) + 180) % 360         # A:deg = γ:deg + 180
+            # - 3.15.2 Calculate the topocentric azimuth angle
+            out[AZIMUTH_ANGLE, i, :] = gamma = (degrees(gamma) + 180) % 360     # Φ:deg = Γ + 180
 
     return out
 
 
 def fast_spa(
-    datetime_like: ArrayLike,
-    latitude: ArrayLike,
-    longitude: ArrayLike,
-    elevation: ArrayLike = 0.0,
-    pressure: ArrayLike = 1013.25,
-    temperature: ArrayLike = 12.0,
-    refraction: ArrayLike = 0.0,
-    apply_correction = False,
+    object datetime_like,
+    object latitude,
+    object longitude,
+    object elevation = 0.0,
+    object pressure = 1013.25,
+    object temperature = 12.0,
+    object refraction= 0.0,
+    double slope = 0.0,
+    double azimuth_rotation = 0.0,
+    object delta_t = None,
+    bint apply_correction = False,
     int num_threads = 1,
 ) -> NDArray:
-    cdef NDArray out, lats, lons
     cdef int size
     cdef tuple shape
-    cdef double[:] ut, delta_t
+    cdef double[:] ut, dt
+    cdef NDArray out, lats, lons
     cdef double[:, :] time_components
+    if delta_t is None:
+        ut, dt = unixtime_delta_t(datetime_like, apply_correction)
+    else:
+        if np.isscalar(delta_t):
+            delta_t = [delta_t]
 
-    ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
-    time_components = _time_components(ut, delta_t, num_threads=num_threads)
+        dt = np.asfarray(delta_t)
+        
+
+        ut = lib.unixtime(lib.dtarray(datetime_like))
+
+    time_components = _time_components(ut, dt, num_threads=num_threads)
     
     lats = np.asfarray(latitude, dtype=DTYPE)
     lons = np.asfarray(longitude, dtype=DTYPE)
@@ -398,7 +432,7 @@ def fast_spa(
 
     shape = ()
     if lats.ndim == 2:
-        shape = (5, time_components.shape[1], lats.shape[0], lats.shape[1])
+        shape = (NUM_SPA_COMPONENTS, time_components.shape[1], lats.shape[0], lats.shape[1])
         lats, lons = lats.ravel(), lons.ravel()
     size = lats.size
 
@@ -416,6 +450,8 @@ def fast_spa(
             pressure,
             temperature,
             refraction,
+            # slope,
+            # azimuth_rotation,
             num_threads,
         )
 
@@ -433,6 +469,8 @@ def fast_spa(
             pressure,
             temperature,
             refraction,
+            # slope,
+            # azimuth_rotation,
             num_threads,
         )
 
@@ -445,6 +483,8 @@ def fast_spa(
             farray1d(pressure, size),
             farray1d(temperature, size),
             farray1d(refraction, size),
+            # slope,
+            # azimuth_rotation,
             num_threads,
         )
 
