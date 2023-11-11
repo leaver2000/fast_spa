@@ -172,11 +172,16 @@ def spa_results():
     """
     A.5. Example
     The results for the following site parameters are listed in Table A5.1:
-    - Date = October 17, 2003. - Time = 12:30:30 Local Standard Time (LST).
-    - Time zone(TZ) = -7 hours. - Longitude = -105.1786/.
-    - Latitude = 39.742476/. - Pressure = 820 mbar.
-    - Elevation = 1830.14 m. - Temperature = 11/C.
-    - Surface slope = 30/. - Surface azimuth rotation = -10/.
+    - Date = October 17, 2003.
+    - Time = 12:30:30 Local Standard Time (LST).
+    - Time zone(TZ) = -7 hours.
+    - Longitude = -105.1786/.
+    - Latitude = 39.742476/.
+    - Pressure = 820 mbar.
+    - Elevation = 1830.14 m.
+    - Temperature = 11/C.
+    - Surface slope = 30/.
+    - Surface azimuth rotation = -10/.
     - )T = 67 Seconds.
 
     LST must be changed to UT by subtracting TZ from LST, and changing the date if necessary.

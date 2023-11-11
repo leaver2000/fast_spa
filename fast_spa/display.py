@@ -107,22 +107,3 @@ class AutoAnimator(FuncAnimation):
             cmap=self.cmap,
             **kwargs,
         )
-
-
-# class SolarPositionAnimator(AutoAnimator):
-#     def __init__(
-#         self,
-#         datetime_obj,
-#         lons: ArrayLike,
-#         lats: ArrayLike,
-#         data: np.ndarray,
-#         extent: Sequence[float],
-#         origin: str = "lower",
-#         fig_scale: float = 4,
-#         features=[],
-#         **kwargs: Any,
-#     ) -> None:
-#         etopo = ETOPO2022()
-#         lons, lats = np.meshgrid(lons, lats)
-#         elevation = etopo.resample(lons, lats)
-#         super().__init__(data, extent, origin, fig_scale, features, **kwargs)
