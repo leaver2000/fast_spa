@@ -110,13 +110,9 @@ class ETOPO2022:
     ):
         x, y = self.lon, self.lat
         lons, lats = np.array(lons), np.array(lats)
-        if not lons.ndim == lats.ndim:
+        if lons.ndim != lats.ndim:
             raise ValueError("lons and lats must have the same number of dimensions")
-        if lons.ndim == 1 == lats.ndim:
-            shape = len(lats), len(lons)
-        else:
-            shape = lons.shape
-
+        shape = (len(lats), len(lons)) if lons.ndim == 1 == lats.ndim else lons.shape
         x_mask = np.logical_and(x >= lons.min(), x <= lons.max())
         y_mask = np.logical_and(y >= lats.min(), y <= lats.max())
         src = deg2points(x[x_mask], y[y_mask])

@@ -95,7 +95,7 @@ def slow_spa(
     dt = np.asanyarray(obj, dtype="datetime64[ns]")
     unix_time = dt.astype(np.float64) // 1e9
 
-    x = np.stack(
+    return np.stack(
         [
             np.stack(
                 solar_position_numpy(
@@ -114,7 +114,6 @@ def slow_spa(
         ],
         axis=1,
     )
-    return x
 
 
 @pytest.mark.parametrize("obj", date_objs)
