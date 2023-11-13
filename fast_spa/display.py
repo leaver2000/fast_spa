@@ -23,6 +23,7 @@ class AutoAnimator(FuncAnimation):
         cmap: Any = "viridis",
         fig_scale: float = 4,
         vmin_max: Sequence[dict[str, float]] | None = None,
+        subplot_kw: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         if data.ndim == 4:
@@ -48,6 +49,7 @@ class AutoAnimator(FuncAnimation):
                 ax[row, col],  # type: ignore
                 data[row * C + col, 0],
                 **vmin_max[row * C + col],
+                **(subplot_kw or {}),
             )
             for row, col in itertools.product(range(B), range(C))
         ]
