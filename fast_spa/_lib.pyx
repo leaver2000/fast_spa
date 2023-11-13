@@ -142,7 +142,7 @@ cdef double apparent_sidereal_time_at_greenwich(
         - jc**3 / 38710000
     ) % 360
 
-    v = v0 + delta_psi * cos(radians(E))                                             # ν = ν0 + ∆ψ * cos ε
+    v = v0 + delta_psi * cos(radians(E))                                        # ν = ν0 + ∆ψ * cos ε
 
     return v
 
@@ -156,7 +156,7 @@ cdef double apparent_sidereal_time_at_greenwich(
 cdef double true_obliquity_of_the_ecliptic(
     double jme, double delta_eps
 ) noexcept nogil: # type: ignore
-    cdef double U, E0
+    cdef double U, E0, E
     U = jme / 10 # U = jme / 10
     #  ε0 = 84381448 − U − 155 U 2 + . 3 . 4680 93 . 1999 25 U −  4 5 6 7 5138 . U − 249 67 . U − 39 05 . U + 712 . U +  89 10
     E0 = (

@@ -1,10 +1,10 @@
 import os
-import functools
-from typing import Iterator, Literal, TypeVar
+
+from typing import Literal, TypeVar
 
 import numpy as np
 import numpy.ma as ma
-from numpy.typing import NDArray
+
 
 try:
     import requests
@@ -13,6 +13,7 @@ except ImportError:
 try:
     import netCDF4
     import pykdtree.kdtree
+
 except ImportError:
     netCDF4 = None
     pykdtree = None
@@ -30,6 +31,8 @@ except ImportError:
         except:
             pass
 
+
+from ._core import deg2xyz
 
 DType_T = TypeVar("DType_T", bound=np.generic)
 Methods = Literal["linear", "nearest", "cubic", "kd"]
@@ -64,33 +67,17 @@ def _download_etopo():
                 f.write(chunk)
 
 
-def _ravel(*args: NDArray[DType_T]) -> Iterator[NDArray[DType_T]]:
-    return (arr.ravel() for arr in args)
-
-
-def _points(lons: NDArray[np.floating], lats: NDArray[np.floating]) -> NDArray[np.floating]:
-    """
-    >>> lons = np.linspace(-80, -78, 200)
-    >>> lats = np.linspace(30, 31, 100)
-    >>> lons, lats = np.meshgrid(lons, lats)
-    >>> coords = xyz(lons.ravel(), lats.ravel())
-    >>> coords.shape
-    (20000, 3)
-    """
-    xx, yy = (np.radians(x) for x in _ravel(lons, lats))
-    return np.c_[
-        R * np.cos(yy) * np.cos(xx),
-        R * np.cos(yy) * np.sin(xx),
-        R * np.sin(yy),
-    ]
+def deg2points(lon, lat):
+    if len(lon) != len(lat):
+        x = np.array(np.meshgrid(lon, lat))
+    else:
+        x = np.stack((lon, lat))[..., None]
+    return deg2xyz(x.reshape(2, -1)).T
 
 
 class ETOPO2022:
     lat: ma.MaskedArray
     lon: ma.MaskedArray
-
-    _file = os.path.join(_ETOPO_CACHE_DIR, "ETOPO_2022_v1_60s_N90W180_surface.nc")
-    _url = "https://www.ngdc.noaa.gov/thredds/fileServer/global/ETOPO2022/60s/60s_surface_elev_netcdf/ETOPO_2022_v1_60s_N90W180_surface.nc"
 
     def __init__(self, file: str | None = None):
         if netCDF4 is None or pykdtree is None:
@@ -107,39 +94,39 @@ class ETOPO2022:
         self.lat = self._ds["lat"][...]
         self.z = self._ds["z"]
 
-        self._tree = functools.partial(pykdtree.kdtree.KDTree)
-
     def __getitem__(self, x: tuple[IDX, IDX]) -> ma.MaskedArray:
         return self.z[x]
 
     def resample(
         self,
-        lons: NDArray,
-        lats: NDArray,
+        lons,
+        lats,
         leafsize=16,
         k=3,
         eps=0,
         distance_upper_bound=None,
         sqr_dists=False,
         mask=None,
-        method: Methods = "kd",
-    ) -> NDArray[np.float64]:
-        if lons.shape != lats.shape:
-            lons, lats = np.meshgrid(lons, lats)
-        assert (lons.ndim == lats.ndim == 2) & (lons.shape == lats.shape)
-        y_mask = np.logical_and(self.lat >= lats.min(), self.lat <= lats.max())
-        x_mask = np.logical_and(self.lon >= lons.min(), self.lon <= lons.max())
-        xx, yy = np.meshgrid(self.lon[x_mask], self.lat[y_mask])
+    ):
+        x, y = self.lon, self.lat
+        lons, lats = np.array(lons), np.array(lats)
+        if not lons.ndim == lats.ndim:
+            raise ValueError("lons and lats must have the same number of dimensions")
+        if lons.ndim == 1 == lats.ndim:
+            shape = len(lats), len(lons)
+        else:
+            shape = lons.shape
+
+        x_mask = np.logical_and(x >= lons.min(), x <= lons.max())
+        y_mask = np.logical_and(y >= lats.min(), y <= lats.max())
+        src = deg2points(x[x_mask], y[y_mask])
+        tgt = deg2points(lons, lats)
+
         data = self[y_mask, x_mask].ravel()
-        if method != "kd":
-            import scipy.interpolate
 
-            points = _ravel(xx, yy)
-            return scipy.interpolate.griddata(points, data, (lons, lats), method=method)
-
-        shape = lons.shape
-        _, i = self._tree(_points(xx, yy), leafsize=leafsize).query(
-            _points(lons, lats),
+        tree = pykdtree.kdtree.KDTree(src, leafsize=leafsize)  # type: ignore
+        _, i = tree.query(
+            tgt,
             k=k,
             eps=eps,
             distance_upper_bound=distance_upper_bound,

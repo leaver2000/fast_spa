@@ -73,7 +73,7 @@ def test_fastspa(obj: list[Any]) -> None:
 
 
 def solar_position_numpy(*args, **kwargs):
-    theta, theta0, e, e0, phi, eot = spa.solar_position_numpy(
+    theta, theta0, e, e0, phi, eot = spa.solar_position_numpy(  # type: ignore
         *args,
         **kwargs,
         sst=False,
@@ -210,3 +210,19 @@ def test_results_for_example(spa_results):
     zen, azi = fastspa.fast_spa(*args).ravel()
     assert np.allclose(zen, expect_zen, atol=1e-2)
     assert np.allclose(azi, expect_azi, atol=1e-2)
+
+
+DEGS = [
+    [[0, 1, 3, 4, 5], [0, 1, 3, 4, 5]],
+]
+
+
+@pytest.mark.parametrize("degs", DEGS)
+def test_xyz_rad_deg(degs):
+    degs = np.array(degs, dtype=float)
+    xyz = fastspa.deg2xyz(degs)
+    assert xyz.shape == (3,) + degs.shape[1:]
+    rads = fastspa.xyz2rad(xyz)
+    assert rads.shape == degs.shape
+    assert np.allclose(degs, np.degrees(rads), atol=1e-6)
+    assert np.allclose(xyz, fastspa.rad2xyz(rads), atol=1e-6)
