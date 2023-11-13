@@ -3,33 +3,20 @@
 # pyright: reportGeneralTypeIssues=false
 import cython
 cimport cython
-from cython.parallel cimport prange # type: ignore
-from libc.math cimport sin, cos, pi
+from cython.parallel cimport prange  # type: ignore
 
 import numpy as np
 cimport numpy as np
+
+from ._lib cimport degrees, radians, sin, cos
+
 np.import_array()
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.nonecheck(False)
-@cython.cdivision(True)
-cdef inline double radians(double deg) noexcept nogil: # type: ignore
-    return deg * (pi / 180)
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-@cython.nonecheck(False)
-@cython.cdivision(True)
-cdef inline double degrees(double rad) noexcept nogil: # type: ignore
-    return (rad * 180) / pi
-
 
 # =============================================================================
 # - nutation
 # =============================================================================
 # HELIOCENTRIC LONGITUDE TERMS
-cdef double[:, :] L0 = np.array(
+cdef const double[:, :] L0 = np.array(
     [
         [175347046.0, 0.0, 0.0],
         [3341656.0, 4.6692568, 6283.07585],
@@ -98,7 +85,7 @@ cdef double[:, :] L0 = np.array(
     ], 
     dtype=np.float64
 )
-cdef double[:, :] L1 = np.array(
+cdef const double[:, :] L1 = np.array(
     [
         [628331966747.0, 0.0, 0.0],
         [206059.0, 2.678235, 6283.07585],
@@ -137,7 +124,7 @@ cdef double[:, :] L1 = np.array(
     ], 
     dtype=np.float64
 )
-cdef double[:, :] L2 = np.array(
+cdef const double[:, :] L2 = np.array(
     [
         [52919.0, 0.0, 0.0],
         [8720.0, 1.0721, 6283.0758],
@@ -162,7 +149,7 @@ cdef double[:, :] L2 = np.array(
     ], 
     dtype=np.float64
 )
-cdef double[:, :] L3 = np.array(
+cdef const double[:, :] L3 = np.array(
     [
         [289.0, 5.844, 6283.076],
         [35.0, 0.0, 0.0],
@@ -173,7 +160,7 @@ cdef double[:, :] L3 = np.array(
         [1.0, 5.97, 242.73],
     ]
 )
-cdef double[:, :] L4 = np.array(
+cdef const double[:, :] L4 = np.array(
     [
         [114.0, 3.142, 0.0], 
         [8.0, 4.13, 6283.08], 
@@ -181,7 +168,7 @@ cdef double[:, :] L4 = np.array(
     ], 
     dtype=np.float64
 )
-cdef double[:, :] L5 = np.array(
+cdef const double[:, :] L5 = np.array(
     [
         [1.0, 3.14, 0.0]
     ],
@@ -189,7 +176,7 @@ cdef double[:, :] L5 = np.array(
 )
 
 # HELIOCENTRIC LATITUDE TERMS
-cdef double[:, :] B0 = np.array(
+cdef const double[:, :] B0 = np.array(
     [
         [280.0, 3.199, 84334.662],
         [102.0, 5.422, 5507.553],
@@ -199,7 +186,7 @@ cdef double[:, :] B0 = np.array(
     ], 
     dtype=np.float64
 )
-cdef double[:, :] B1 = np.array(
+cdef const double[:, :] B1 = np.array(
     [
         [9.0, 3.9, 5507.55], 
         [6.0, 1.73, 5223.69]
@@ -209,7 +196,7 @@ cdef double[:, :] B1 = np.array(
 
 
 # heliocentric radius terms
-cdef double[:, :] R0 = np.array(
+cdef const double[:, :] R0 = np.array(
     [
         [100013989.0, 0.0, 0.0],
         [1670700.0, 3.0984635, 6283.07585],
@@ -254,7 +241,7 @@ cdef double[:, :] R0 = np.array(
     ], 
     dtype=np.float64
 )
-cdef double[:, :] R1 = np.array(
+cdef const double[:, :] R1 = np.array(
     [
         [103019.0, 1.10749, 6283.07585],
         [1721.0, 1.0644, 12566.1517],
@@ -269,7 +256,7 @@ cdef double[:, :] R1 = np.array(
     ],
     dtype=np.float64
 )
-cdef double[:, :] R2 = np.array(
+cdef const double[:, :] R2 = np.array(
     [
         [4359.0, 5.7846, 6283.0758],
         [124.0, 5.579, 12566.152],
@@ -279,14 +266,14 @@ cdef double[:, :] R2 = np.array(
         [3.0, 5.47, 18849.23],
     ], dtype=np.float64
 )
-cdef double[:, :] R3 = np.array(
+cdef const double[:, :] R3 = np.array(
     [
         [145.0, 4.273, 6283.076],
         [7.0, 3.92, 12566.15]
     ], 
     dtype=np.float64
 )
-cdef double[:, :] R4 = np.array(
+cdef const double[:, :] R4 = np.array(
     [
         [4.0, 2.56, 6283.08]
     ],
@@ -305,7 +292,7 @@ cdef double[:, :] R4 = np.array(
 @cython.nonecheck(False)
 @cython.cdivision(True)
 cdef double _heilo(
-    double jme, double[:, :] terms, int num_threads) noexcept nogil: # type: ignore
+    double jme, const double[:, :] terms, int num_threads) noexcept nogil: # type: ignore
     cdef int i, n
     cdef double A, B, C, x
 
@@ -385,7 +372,7 @@ cdef double heliocentric_radius_vector(double jme, int num_threads)  noexcept no
 # =============================================================================
 # 3.3. Calculate the geocentric longitude and latitude (Θ and β)
 # =============================================================================
-cdef double[:, :] LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS = np.array(
+cdef const double[:, :] LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS = np.array(
     [   # Y0 Y1 Y2 Y3 Y4
         [0, 0, 0, 0, 1],
         [-2, 0, 0, 2, 2],
@@ -454,7 +441,7 @@ cdef double[:, :] LONGITUDE_AND_OBLIQUITY_NUTATION_SIN_COEFFICIENTS = np.array(
     dtype=np.float64
 )
 
-cdef double[:, :] LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS = np.array(
+cdef const double[:, :] LONGITUDE_AND_OBLIQUITY_NUTATION_COEFFICIENTS = np.array(
     [   # A B C D
         [-171996, -174.2, 92025, 8.9],
         [-13187, -1.6, 5736, -3.1],
@@ -535,7 +522,7 @@ cdef (double, double) nutation_in_longitude_and_obliquity(
 ) noexcept nogil: # type: ignore
     cdef int i
     cdef double A, B, C, D, X0, X1, X2, X3, X4, Y0, Y1, Y2, Y3, Y4, rads, delta_psi, delta_eps
-
+    
     delta_psi = 0.0
     delta_eps = 0.0
 
