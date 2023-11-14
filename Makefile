@@ -4,3 +4,9 @@ clean:
 
 inplace:
 	python setup.py build_ext --inplace && pytest tests -s
+
+coverage:
+	$(MAKE) clean \
+	&& python setup.py build_ext --inplace --coverage \
+	&& coverage run -m pytest \
+	&& coverage report -m
