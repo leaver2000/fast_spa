@@ -8,11 +8,6 @@
 
 from cython.view cimport array as cvarray
 
-from numpy cimport (
-    NPY_TYPES,
-    ndarray as NDArray,
-    PyArray_Cast,
-)
 import numpy as np
 cimport numpy as np
 np.import_array()
@@ -30,7 +25,7 @@ cdef extern from "<math.h>" nogil:
     double atan(double x)
     double atan2(double y, double x)
     const double pi "M_PI"  # as in Python's math module
-    
+
 cdef inline double radians(double deg) noexcept nogil: # type: ignore
     return deg * (pi / 180)
 
@@ -71,12 +66,22 @@ cdef inline double[:, :, :, :] view4d(int a, int b, int c, int d) noexcept:
 # =============================================================================
 # - array
 # =============================================================================
-cdef inline NDArray cast_array(NDArray a, int n) noexcept:
-    return PyArray_Cast(a, n)
+F64:Floating
+F32:Floating
 
-cdef inline NDArray darray1d(object x, int size) noexcept:
-    cdef NDArray out
-    out = np.asfarray(x, dtype=np.float64)
+cdef enum Floating:
+    F32 = np.NPY_FLOAT
+    F64 = np.NPY_DOUBLE
+    
+cdef inline np.ndarray cast_array(np.ndarray a, int n) noexcept:
+    return np.PyArray_Cast(a, n)
+
+cdef inline np.ndarray asfarray(object x, Floating dtype = F64):
+    return np.PyArray_FROM_OT(x, dtype)
+
+cdef inline np.ndarray darray1d(object x, int size) noexcept:
+    cdef np.ndarray out
+    out = asfarray(x)
     if out.ndim == 0:
         return out[np.newaxis]
     elif out.ndim > 1:
@@ -84,23 +89,23 @@ cdef inline NDArray darray1d(object x, int size) noexcept:
     assert out.size == size
     return out
 
-cdef inline NDArray dtarray(object datetime_like) noexcept:
+cdef inline np.ndarray dtarray(object datetime_like) noexcept:
     """
     main entry point for datetime_like.
     need to add validation to the object so everthing else can be marked as
     `nogil`
     """
-    cdef NDArray dt
+    cdef np.ndarray dt
     dt = np.asanyarray(datetime_like, dtype="datetime64[ns]") # type: ignore
     return dt
 
 
-cdef inline long[:] years(NDArray dt) noexcept:
+cdef inline long[:] years(np.ndarray dt) noexcept:
     cdef long[:] Y 
     Y = dt.astype("datetime64[Y]").astype(np.int64) + 1970
     return Y
 
-cdef inline long[:] months(NDArray dt) noexcept:
+cdef inline long[:] months(np.ndarray dt) noexcept:
     cdef long[:] M
     M = dt.astype("datetime64[M]").astype(np.int64) % 12 + 1
     return M
@@ -108,9 +113,9 @@ cdef inline long[:] months(NDArray dt) noexcept:
 # =============================================================================
 # - time
 # =============================================================================
-cdef inline double[:] unixtime(NDArray dt) noexcept:
+cdef inline double[:] unixtime(np.ndarray dt) noexcept:
     cdef double[:] ut
-    ut = cast_array(dt, NPY_TYPES.NPY_DOUBLE) // 1e9
+    ut = cast_array(dt, F64) // 1e9
     return ut
 
 # - scalar functions

@@ -9,6 +9,7 @@ description = "..."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.22"]
+license = { file = "LICENSE" }
 
 [project.optional-dependencies]
 test = ["Cython >= 0.29.23", "pytest >= 7.2.0", "coverage >= 6.5.0"]
@@ -18,8 +19,15 @@ lint = ["black", "flake8"]
 include = ["fast_spa"]
 
 [tool.setuptools.package-data]
-fastspa = ["*.pxd"]
+fast_spa = ["*.pxd"]
 
 [tool.black]
 line-length = 79
 target-version = ["py310"]
+
+[tool.pytest]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+plugins = ["Cython.Coverage"]
+source = ["fast_spa"]

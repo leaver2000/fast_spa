@@ -73,24 +73,12 @@ cdef u16 AZIMUTH_ANGLE = 1
 
 
 cdef u16 NUM_TIME_COMPONENTS = 4
-cdef u16 NUM_SPA_COMPONENTS = 2
-
-
-F64:Floating
-F32:Floating
-
-cdef enum Floating:
-    F32 = np.NPY_FLOAT
-    F64 = np.NPY_DOUBLE
-    
+cdef u16 NUM_SPA_COMPONENTS = 2    
 
 DTYPE = np.float64
-
-# cdef double Re = 6370997.0
 EARTH_RADIUS = 6370997.0
+
 # =============================================================================
-cdef np.ndarray asfarray(object x, Floating dtype):
-    return np.PyArray_FROM_OT(x, dtype)
 
 @cython.boundscheck(False)
 @cython.wraparound(False)
@@ -142,7 +130,7 @@ def julian_ephemeris_millennium(
     datetime_like, bint apply_correction = 0, int num_threads = 1):
     cdef double[:] ut, delta_t
     ut, delta_t = unixtime_delta_t(datetime_like, apply_correction)
-    return np.asfarray(_julian_ephemeris_millennium(ut, delta_t, num_threads))
+    return lib.asfarray(_julian_ephemeris_millennium(ut, delta_t, num_threads))
 
 # =============================================================================
 # Polynomila Expression for delta_t
@@ -178,7 +166,7 @@ def pe4dt(datetime_like, bint apply_correction = 0):
     y = lib.years(dt)
     m = lib.months(dt)
 
-    return np.asfarray(_pe4dt(y, m, apply_correction))
+    return lib.asfarray(_pe4dt(y, m, apply_correction))
 
 
 # =============================================================================
@@ -300,7 +288,7 @@ cdef double[:, :] time_components(
 # - python interface
 def get_time_components(
     datetime_like: ArrayLike, apply_correction = False, int num_threads = 1):
-    return np.asfarray(
+    return lib.asfarray(
         time_components(datetime_like, apply_correction, num_threads)
     )
 
@@ -422,7 +410,7 @@ def fast_spa(
         if np.isscalar(delta_t):
             delta_t = [delta_t]
 
-        dt = np.asfarray(delta_t)
+        dt = lib.asfarray(delta_t)
         ut = lib.unixtime(lib.dtarray(datetime_like))
 
     time_components = _time_components(ut, dt, num_threads=num_threads)
@@ -521,7 +509,7 @@ cdef _xyz2rad(np.ndarray[DTYPE_t, ndim=2] xyz, double Re):
     cdef np.ndarray[DTYPE_t, ndim=2] rads
     rads = np.empty((2, xyz.shape[1]), dtype=DTYPE)
 
-    # - vertices
+    # - cartesian
     x = xyz[0]
     y = xyz[1]
     z = xyz[2]
@@ -532,20 +520,19 @@ cdef _xyz2rad(np.ndarray[DTYPE_t, ndim=2] xyz, double Re):
 
     return rads
 
-
 def rad2xyz(object rads, double Re = EARTH_RADIUS):
-    a = asfarray(rads, F64)
+    a = lib.asfarray(rads)
     return _rad2xyz(a, Re)
 
 def deg2xyz(object deg, double Re = EARTH_RADIUS):
-    a = np.radians(asfarray(deg, F64))
+    a = np.radians(lib.asfarray(deg))
     return _rad2xyz(a, Re)
 
 def xyz2rad(object xyz, double Re = EARTH_RADIUS):
-    a = asfarray(xyz, F64)
+    a = lib.asfarray(xyz)
     return _xyz2rad(a, Re)
 
 def xyz2deg(object xyz, double Re = EARTH_RADIUS):
-    a = asfarray(xyz, F64)
+    a = lib.asfarray(xyz)
     return np.degrees(_xyz2rad(a, Re))
 
