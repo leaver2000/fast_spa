@@ -5,6 +5,8 @@ Radiation Applications](https://www.nrel.gov/docs/fy08osti/34302.pdf).
 Designed for calculating solar zenith and azimuth across a temporal and spatial
 dimension.
 
+![etopo2022](assets/laea-example.gif)
+
 ```bash
 git clone ...
 python3 -m venv .venv && source .venv/bin/activate
@@ -70,6 +72,7 @@ def main(
     fig, axes = plt.subplots(
         2, 3, figsize=(20, 6), subplot_kw={"projection": ccrs.PlateCarree()}
     )
+
     # - plot the non-resampled elevation data
     lons, lats = np.meshgrid(lons, lats)
     y_mask = np.logical_and(etopo.lat >= lats.min(), etopo.lat <= lats.max())
@@ -88,13 +91,14 @@ def main(
         "elevation",
         cmap="terrain",
     )
-    # resample the elevation data to fit the lats and lons
+
+    # - resample the elevation data to fit the lon, lat grid
     e = etopo.resample(lons, lats)
     e[e < -100] = -100  # set the ocean to -100m
 
     spa_data = fast_spa.fast_spa(datetime_obj, lats, lons, e)
     
-     # apply a weight to the elevation data for SPA calculation
+    # - apply a weight to the elevation data for SPA calculation
     weighted = fast_spa.fast_spa(datetime_obj, lats, lons, e * weight) 
     weighted = np.radians(weighted)
 
