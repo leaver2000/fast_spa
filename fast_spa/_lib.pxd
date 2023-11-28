@@ -66,13 +66,13 @@ cdef inline double[:, :, :, :] view4d(int a, int b, int c, int d) noexcept:
 # =============================================================================
 # - array
 # =============================================================================
-F64:Floating
-F32:Floating
-
 cdef enum Floating:
     F32 = np.NPY_FLOAT
     F64 = np.NPY_DOUBLE
     
+F64:Floating
+F32:Floating
+
 cdef inline np.ndarray cast_array(np.ndarray a, int n) noexcept:
     return np.PyArray_Cast(a, n)
 

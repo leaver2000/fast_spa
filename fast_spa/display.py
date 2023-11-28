@@ -24,29 +24,37 @@ class AutoAnimator(FuncAnimation):
         fig_scale: float = 4,
         vmin_max: Sequence[dict[str, float]] | None = None,
         subplot_kw: dict[str, Any] | None = None,
+        projection: Any = ccrs.PlateCarree(),
+        transform: Any = ccrs.PlateCarree(),
+        set_global: bool = False,
         **kwargs: Any,
     ):
         if data.ndim == 4:
             data = data[np.newaxis, ...]
         assert data.ndim == 5
+
         self.extent = extent
         self.origin = origin
         self.fig_scale = fig_scale
         self.features = features
         self.cmap = cmap
+        self.projection = projection
+        self.transform = transform
+        self.set_global = set_global
         vmin_max = vmin_max or list(itertools.repeat({}, data.shape[1]))
 
         # construct figure and axes
         B, C, T, Y, X = data.shape
-        fig, ax = self._subplots(rows=B, channels=C)
+        fig, axes = self._subplots(rows=B, channels=C)
+        self.fig = fig
+        self.axes = axes
 
         # reshape data to 4D tensor
-        data = data.reshape(-1, T, Y, X)
-        # config = config or list(itertools.repeat({}, C))
+        self.data = data = data.reshape(-1, T, Y, X)
 
         self.images = [
             self._imshow(
-                ax[row, col],  # type: ignore
+                axes[row, col],  # type: ignore
                 data[row * C + col, 0],
                 **vmin_max[row * C + col],
                 **(subplot_kw or {}),
@@ -54,7 +62,7 @@ class AutoAnimator(FuncAnimation):
             for row, col in itertools.product(range(B), range(C))
         ]
 
-        self.data = data
+        # self.data = data
 
         super().__init__(
             fig,
@@ -74,7 +82,7 @@ class AutoAnimator(FuncAnimation):
             figsize=(scale * channels, scale * rows),
             sharex=True,
             sharey=True,
-            subplot_kw=dict(projection=ccrs.PlateCarree()),
+            subplot_kw=dict(projection=self.projection),
         )
         fig.tight_layout()
 
@@ -88,7 +96,11 @@ class AutoAnimator(FuncAnimation):
             for j in range(y):
                 ax = axes[i, j]
                 ax.coastlines()
-                ax.set_extent(self.extent)
+                if self.set_global:
+                    ax.set_global()
+                else:
+                    ax.set_extent(self.extent)
+
                 for feature in self.features:
                     ax.add_feature(feature)
 
@@ -104,7 +116,7 @@ class AutoAnimator(FuncAnimation):
             data,
             origin=self.origin,
             extent=self.extent,
-            transform=ccrs.PlateCarree(),
+            transform=self.transform,
             animated=True,
             cmap=self.cmap,
             **kwargs,

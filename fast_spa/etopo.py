@@ -4,7 +4,7 @@ from typing import Literal, TypeVar
 
 import numpy as np
 import numpy.ma as ma
-
+from numpy.typing import ArrayLike, NDArray
 
 try:
     import requests
@@ -76,8 +76,8 @@ def deg2points(lon, lat):
 
 
 class ETOPO2022:
-    lat: ma.MaskedArray
-    lon: ma.MaskedArray
+    x: ma.MaskedArray
+    y: ma.MaskedArray
 
     def __init__(self, file: str | None = None):
         if netCDF4 is None or pykdtree is None:
@@ -89,26 +89,25 @@ class ETOPO2022:
         if file is None:
             file = _ETOPO_NC_FILE
 
-        self._ds = netCDF4.Dataset(file)  # type: ignore
-        self.lon = self._ds["lon"][...]
-        self.lat = self._ds["lat"][...]
-        self.z = self._ds["z"]
+        ds = netCDF4.Dataset(file)  # type: ignore
+        self.x = ds["lon"][...]
+        self.y = ds["lat"][...]
+        self.z = ds["z"]
 
-    def __getitem__(self, x: tuple[IDX, IDX]) -> ma.MaskedArray:
-        return self.z[x]
+    def __getitem__(self, idx: tuple[IDX, IDX]) -> ma.MaskedArray:
+        return self.z[idx]
 
     def resample(
         self,
-        lons,
-        lats,
-        leafsize=16,
-        k=3,
-        eps=0,
+        lons: ArrayLike,
+        lats: ArrayLike,
+        leafsize: int = 16,
+        k: int = 3,
+        eps: int = 0,
         distance_upper_bound=None,
         sqr_dists=False,
         mask=None,
-    ):
-        x, y = self.lon, self.lat
+    ) -> NDArray[np.floating]:
         lons, lats = np.array(lons), np.array(lats)
         if not lons.ndim == lats.ndim:
             raise ValueError("lons and lats must have the same number of dimensions")
@@ -117,9 +116,12 @@ class ETOPO2022:
         else:
             shape = lons.shape
 
-        x_mask = np.logical_and(x >= lons.min(), x <= lons.max())
-        y_mask = np.logical_and(y >= lats.min(), y <= lats.max())
-        src = deg2points(x[x_mask], y[y_mask])
+        x_mask, y_mask = self.mask_lonlat(lons, lats)
+        # x, y = self.x, self.y
+        # x_mask = np.logical_and(x >= lons.min(), x <= lons.max())
+        # y_mask = np.logical_and(y >= lats.min(), y <= lats.max())
+
+        src = deg2points(self.x[x_mask], self.y[y_mask])
         tgt = deg2points(lons, lats)
 
         data = self[y_mask, x_mask].ravel()
@@ -134,3 +136,9 @@ class ETOPO2022:
             mask=mask,
         )
         return np.mean(data[i], axis=1).reshape(shape)
+
+    def mask_lonlat(self, lon: ArrayLike, lat: ArrayLike) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
+        lon, lat = np.array(lon), np.array(lat)
+        x_mask = np.logical_and(self.x >= lon.min(), self.x <= lon.max())
+        y_mask = np.logical_and(self.y >= lat.min(), self.y <= lat.max())
+        return x_mask, y_mask
