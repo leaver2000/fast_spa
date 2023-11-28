@@ -92,17 +92,16 @@ class AutoAnimator(FuncAnimation):
             axes = axes[..., np.newaxis]
 
         x, y = axes.shape
-        for i in range(x):
-            for j in range(y):
-                ax = axes[i, j]
-                ax.coastlines()
-                if self.set_global:
-                    ax.set_global()
-                else:
-                    ax.set_extent(self.extent)
+        for i, j in itertools.product(range(x), range(y)):
+            ax = axes[i, j]
+            ax.coastlines()
+            if self.set_global:
+                ax.set_global()
+            else:
+                ax.set_extent(self.extent)
 
-                for feature in self.features:
-                    ax.add_feature(feature)
+            for feature in self.features:
+                ax.add_feature(feature)
 
         return fig, axes  # type: ignore
 
