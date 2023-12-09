@@ -185,8 +185,6 @@ def spa_results():
     - )T = 67 Seconds.
 
     LST must be changed to UT by subtracting TZ from LST, and changing the date if necessary.
-
-    Table A5.1. Results for Example
     """
     return (
         ["2003-10-17 19:30:30"],
