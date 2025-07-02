@@ -415,8 +415,8 @@ def fast_spa(
 
     time_components = _time_components(ut, dt, num_threads=num_threads)
     
-    lats = np.asfarray(latitude, dtype=DTYPE)
-    lons = np.asfarray(longitude, dtype=DTYPE)
+    lats = np.asarray(latitude, dtype=DTYPE)
+    lons = np.asarray(longitude, dtype=DTYPE)
 
     if not lats.ndim == lons.ndim:
         lats, lons = np.meshgrid(lats, lons)
